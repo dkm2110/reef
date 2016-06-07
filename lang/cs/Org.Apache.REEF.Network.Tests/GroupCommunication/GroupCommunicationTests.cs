@@ -28,6 +28,7 @@ using System.Threading.Tasks;
 using Org.Apache.REEF.Common.Io;
 using Org.Apache.REEF.Common.Tasks;
 using Org.Apache.REEF.Network.Examples.GroupCommunication;
+using Org.Apache.REEF.Network.Group;
 using Org.Apache.REEF.Network.Group.Config;
 using Org.Apache.REEF.Network.Group.Driver;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
@@ -98,6 +99,63 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
 
                 string msg3 = (messages1.Take() as GroupCommunicationMessage<string>).Data[0];
                 Assert.Equal("ghi", msg3);
+            }
+        }
+
+        /// <summary>
+        /// Tests that right exception is thrown when sender writes to a closed connection
+        /// </summary>
+        [Fact]
+        public void TestSenderException()
+        {
+            using (var nameServer = NameServerTests.BuildNameServer())
+            {
+                IPEndPoint endpoint = nameServer.LocalEndpoint;
+
+                BlockingCollection<GeneralGroupCommunicationMessage> messages1 =
+                    new BlockingCollection<GeneralGroupCommunicationMessage>();
+                BlockingCollection<GeneralGroupCommunicationMessage> messages2 =
+                    new BlockingCollection<GeneralGroupCommunicationMessage>();
+
+                var handler1 =
+                    Observer.Create<NsMessage<GeneralGroupCommunicationMessage>>(msg => messages1.Add(msg.Data.First()));
+                var handler2 =
+                    Observer.Create<NsMessage<GeneralGroupCommunicationMessage>>(msg => messages2.Add(msg.Data.First()));
+
+                var networkServiceInjector1 = BuildNetworkServiceInjector(endpoint, handler1);
+                var networkServiceInjector2 = BuildNetworkServiceInjector(endpoint, handler2);
+
+                var networkService1 =
+                    networkServiceInjector1.GetInstance<StreamingNetworkService<GeneralGroupCommunicationMessage>>();
+                var networkService2 =
+                    networkServiceInjector2.GetInstance<StreamingNetworkService<GeneralGroupCommunicationMessage>>();
+                networkService1.Register(new StringIdentifier("id1"));
+                networkService2.Register(new StringIdentifier("id2"));
+
+                Sender sender1 = networkServiceInjector1.GetInstance<Sender>();
+                sender1.Send(CreateGcmStringType("abc", "id1", "id2"));
+
+                networkService2.Dispose();
+
+                int retries = 100;
+                int sleepTimeInMs = 500;
+                for (int i = 0; i < retries; i++)
+                {
+                    try
+                    {
+                        sender1.Send(CreateGcmStringType("abc", "id1", "id2"));
+                    }
+                    catch (Exception e)
+                    {
+                        if (e is GroupCommunicationException)
+                        {
+                            return;
+                        }
+                        Assert.True(false, "Exception happended but it is not of type GroupCommunicationException");
+                    }
+                    Thread.Sleep(sleepTimeInMs);
+                }
+                Assert.True(false, "No exception was thrown even when several send tries were done");
             }
         }
 
@@ -835,11 +893,33 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
             Assert.Equal(false, res2.IsLast);
         }
 
-        public static List<ICommunicationGroupClient> CommGroupClients(string groupName, int numTasks, IGroupCommDriver groupCommDriver, ICommunicationGroupDriver commGroupDriver, IConfiguration userServiceConfig)
+        public static List<ICommunicationGroupClient> CommGroupClients(string groupName,
+            int numTasks,
+            IGroupCommDriver groupCommDriver,
+            ICommunicationGroupDriver commGroupDriver,
+            IConfiguration userServiceConfig)
+        {
+            List<StreamingNetworkService<GeneralGroupCommunicationMessage>> nsList;
+            return
+                GroupCommunicationClients(groupName,
+                    numTasks,
+                    groupCommDriver,
+                    commGroupDriver,
+                    userServiceConfig,
+                    out nsList);
+        }
+
+        public static List<ICommunicationGroupClient> GroupCommunicationClients(string groupName,
+            int numTasks,
+            IGroupCommDriver groupCommDriver,
+            ICommunicationGroupDriver commGroupDriver,
+            IConfiguration userServiceConfig,
+            out List<StreamingNetworkService<GeneralGroupCommunicationMessage>> networkServiceList)
         {
             List<ICommunicationGroupClient> commGroups = new List<ICommunicationGroupClient>();
             IConfiguration serviceConfig = groupCommDriver.GetServiceConfiguration();
             serviceConfig = Configurations.Merge(serviceConfig, userServiceConfig);
+            networkServiceList = new List<StreamingNetworkService<GeneralGroupCommunicationMessage>>();
 
             List<IConfiguration> partialConfigs = new List<IConfiguration>();
             for (int i = 0; i < numTasks; i++)
@@ -869,8 +949,9 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
                 IInjector injector = TangFactory.GetTang().NewInjector(conf);
 
                 // simulate injection at evaluator side
-                IGroupCommClient groupCommClient = injector.GetInstance<IGroupCommClient>();
-                commGroups.Add(groupCommClient.GetCommunicationGroup(groupName));
+                var commGroupClient = injector.GetInstance<IGroupCommClient>();
+                networkServiceList.Add(injector.GetInstance<StreamingNetworkService<GeneralGroupCommunicationMessage>>());
+                commGroups.Add(commGroupClient.GetCommunicationGroup(groupName));
             }
             return commGroups;
         }

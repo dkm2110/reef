@@ -68,7 +68,8 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             PipelineDataConverter = dataConverter;
             _initialize = initialize;
 
-            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(message => topology.OnNext(message));
+            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(topology.OnNext,
+                topology.OnError);
             networkHandler.Register(operatorName, msgHandler);
         }
 
@@ -98,16 +99,28 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// <param name="data">The data to send.</param>
         public void Send(T data)
         {
-            var messageList = PipelineDataConverter.PipelineMessage(data);
-
-            if (data == null)
+            try
             {
-                throw new ArgumentNullException("data");
+                var messageList = PipelineDataConverter.PipelineMessage(data);
+
+                if (data == null)
+                {
+                    throw new ArgumentNullException("data");
+                }
+
+                foreach (var message in messageList)
+                {
+                    _topology.SendToChildren(message, MessageType.Data);
+                }
             }
-
-            foreach (var message in messageList)
+            catch (Exception e)
             {
-                _topology.SendToChildren(message, MessageType.Data);
+                var error = e;
+                if (!(e is GroupCommunicationException))
+                {
+                    error = new GroupCommunicationException(e);
+                }
+                throw error;
             }
         }
 

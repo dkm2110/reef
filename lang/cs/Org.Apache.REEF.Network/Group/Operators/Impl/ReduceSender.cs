@@ -74,7 +74,8 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             _topology = topology;
             _initialize = initialize;
 
-            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(message => topology.OnNext(message));
+            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(topology.OnNext,
+                topology.OnError);
             networkHandler.Register(operatorName, msgHandler);
 
             PipelineDataConverter = dataConverter;
@@ -111,33 +112,45 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// <param name="data">The data to send</param>
         public void Send(T data)
         {
-            var messageList = PipelineDataConverter.PipelineMessage(data);
-
-            if (data == null)
+            try
             {
-                throw new ArgumentNullException("data");
-            }
+                var messageList = PipelineDataConverter.PipelineMessage(data);
 
-            foreach (var message in messageList)
-            {
-                if (_topology.HasChildren())
+                if (data == null)
                 {
-                    var reducedValueOfChildren = _topology.ReceiveFromChildren(_pipelinedReduceFunc);
+                    throw new ArgumentNullException("data");
+                }
 
-                    var mergeddData = new List<PipelineMessage<T>> { message };
-
-                    if (reducedValueOfChildren != null)
+                foreach (var message in messageList)
+                {
+                    if (_topology.HasChildren())
                     {
-                        mergeddData.Add(reducedValueOfChildren);
-                    }
+                        var reducedValueOfChildren = _topology.ReceiveFromChildren(_pipelinedReduceFunc);
 
-                    var reducedValue = _pipelinedReduceFunc.Reduce(mergeddData);
-                    _topology.SendToParent(reducedValue, MessageType.Data);
+                        var mergeddData = new List<PipelineMessage<T>> { message };
+
+                        if (reducedValueOfChildren != null)
+                        {
+                            mergeddData.Add(reducedValueOfChildren);
+                        }
+
+                        var reducedValue = _pipelinedReduceFunc.Reduce(mergeddData);
+                        _topology.SendToParent(reducedValue, MessageType.Data);
+                    }
+                    else
+                    {
+                        _topology.SendToParent(message, MessageType.Data);
+                    }
                 }
-                else
+            }
+            catch (Exception e)
+            {
+                var error = e;
+                if (!(e is GroupCommunicationException))
                 {
-                    _topology.SendToParent(message, MessageType.Data);
+                    error = new GroupCommunicationException(e);
                 }
+                throw error;
             }
         }
 

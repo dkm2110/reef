@@ -15,10 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Reactive;
+using System.Threading;
 using Org.Apache.REEF.Tang.Implementations.Tang;
 using Org.Apache.REEF.Wake.Remote;
 using Org.Apache.REEF.Wake.Remote.Impl;
@@ -32,7 +34,7 @@ namespace Org.Apache.REEF.Wake.Tests
     {
         private readonly StreamingRemoteManagerFactory _remoteManagerFactory1 =
             TangFactory.GetTang().NewInjector().GetInstance<StreamingRemoteManagerFactory>();
-        
+
         /// <summary>
         /// Tests one way communication between Remote Managers 
         /// Remote Manager listens on any available port
@@ -272,7 +274,7 @@ namespace Org.Apache.REEF.Wake.Tests
             Assert.Equal("received message: there", events[1]);
             Assert.Equal("received message: buddy", events[2]);
         }
-        
+
         /// <summary>
         /// Test whether observer can be created with IRemoteMessage interface
         /// </summary>
@@ -342,6 +344,104 @@ namespace Org.Apache.REEF.Wake.Tests
             }
 
             Assert.Equal(4, events.Count);
+        }
+
+        /// <summary>
+        /// Tests we receive right exception on sender if remotemanager receiving it has been disposed
+        /// </summary>
+        [Fact]
+        public void TestStreamingRemoteManagerWriteExceptions()
+        {
+            int sleepTimeinMs = 500;
+            int reTries = 100;
+            IPAddress listeningAddress = IPAddress.Parse("127.0.0.1");
+            var observer = new MockObserver<string>();
+            List<string> events = new List<string>();
+            IStreamingCodec<string> codec = TangFactory.GetTang().NewInjector().GetInstance<StringStreamingCodec>();
+
+            var remoteManager1 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec);
+            var remoteManager2 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec);
+            IPEndPoint endpoint1 = new IPEndPoint(listeningAddress, 0);
+            remoteManager2.RegisterObserver(endpoint1, observer);
+
+            var remoteObserver = remoteManager1.GetRemoteObserver(remoteManager2.LocalEndpoint);
+            remoteObserver.OnNext("abc");
+            remoteObserver.OnNext("def");
+            remoteObserver.OnNext("ghi");
+
+            for (int i = 0; i < reTries; i++)
+            {
+                int receivedCount = observer.OnNextCounter;
+                if (receivedCount == 3)
+                {
+                    break;
+                }
+                Thread.Sleep(sleepTimeinMs);
+            }
+
+            if (observer.OnNextCounter != 3)
+            {
+                Assert.True(false, "Number of received messages are not equal to 3");
+            }
+
+            remoteManager2.Dispose();
+            Action send = () => remoteObserver.OnNext("jkl");
+            Assert.Throws<StreamingRemoteManagerException>(send);
+        }
+
+        /// <summary>
+        /// Tests that OnError() of appropriate observer is called in ObserverContainer.
+        /// </summary>
+        [Fact]
+        public void TestStreamingRemoteManagerReadExceptions()
+        {
+            int sleepTimeinMs = 500;
+            int reTries = 100;
+            IPAddress listeningAddress = IPAddress.Parse("127.0.0.1");
+            var observer = new MockObserver<string>();
+            List<string> events = new List<string>();
+            IStreamingCodec<string> codec = TangFactory.GetTang().NewInjector().GetInstance<StringStreamingCodec>();
+
+            var remoteManager1 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec);
+            var remoteManager2 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec);
+            IPEndPoint endpoint1 = new IPEndPoint(listeningAddress, 0);
+            remoteManager2.RegisterObserver(endpoint1, observer);
+
+            var remoteObserver = remoteManager1.GetRemoteObserver(remoteManager2.LocalEndpoint);
+            remoteObserver.OnNext("abc");
+            remoteObserver.OnNext("def");
+            remoteObserver.OnNext("ghi");
+
+            for (int i = 0; i < reTries; i++)
+            {
+                int receivedCount = observer.OnNextCounter;
+                if (receivedCount == 3)
+                {
+                    break;
+                }
+                Thread.Sleep(sleepTimeinMs);
+            }
+
+            if (observer.OnNextCounter != 3)
+            {
+                Assert.True(false, "Number of received messages are not equal to 3");
+            }
+
+            remoteManager1.Dispose();
+          
+            for (int i = 0; i < reTries; i++)
+            {
+                int errorCount = observer.OnErrorCounter;
+                if (errorCount > 0)
+                {
+                    Assert.True(observer.ThrownException is StreamingTransportLayerExceptionWithEndPoint);
+                    Assert.NotNull(observer.ThrownException.InnerException);
+                    Assert.True(observer.ThrownException.InnerException is StreamingLinkException);
+                    return;
+                }
+                Thread.Sleep(sleepTimeinMs);
+            }
+            Assert.True(false, "OnError condition not reached in the observer");
         }
     }
 }

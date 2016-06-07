@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive;
@@ -61,8 +62,8 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             Version = DefaultVersion;
             _topology = topology;
             _initialize = initialize;
-
-            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(message => topology.OnNext(message));
+            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(topology.OnNext,
+                topology.OnError);
             networkHandler.Register(operatorName, msgHandler);
         }
 
@@ -92,9 +93,21 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// <returns>The sublist of messages</returns>
         public List<T> Receive()
         {
-            IList<T> elements = _topology.ReceiveListFromParent();
-            _topology.ScatterToChildren(elements, MessageType.Data);
-            return elements.ToList();
+            try
+            {
+                IList<T> elements = _topology.ReceiveListFromParent();
+                _topology.ScatterToChildren(elements, MessageType.Data);
+                return elements.ToList();
+            }
+            catch (Exception e)
+            {
+                var error = e;
+                if (!(e is GroupCommunicationException))
+                {
+                    error = new GroupCommunicationException(e);
+                }
+                throw error;
+            }
         }
 
         /// <summary>

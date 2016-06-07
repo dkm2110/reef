@@ -18,9 +18,11 @@
 using System;
 using System.Collections.Generic;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
+using Org.Apache.REEF.Network.NetworkService;
 using Org.Apache.REEF.Tang.Annotations;
 using Org.Apache.REEF.Utilities.Diagnostics;
 using Org.Apache.REEF.Utilities.Logging;
+using Org.Apache.REEF.Wake.Remote;
 
 namespace Org.Apache.REEF.Network.Group.Task.Impl
 {
@@ -55,11 +57,11 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (string.IsNullOrEmpty(operatorName))
             {
-                throw new ArgumentNullException("operatorName");
+                throw new GroupCommunicationException(new ArgumentNullException("operatorName"));
             }
             if (observer == null)
             {
-                throw new ArgumentNullException("observer");
+                throw new GroupCommunicationException(new ArgumentNullException("observer"));
             }
 
             _handlers[operatorName] = observer;
@@ -77,12 +79,11 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
             IObserver<GeneralGroupCommunicationMessage> handler = GetOperatorHandler(operatorName);
             if (handler == null)
             {
-                Exceptions.Throw(new ArgumentException("No handler registered with the operator name: " + operatorName), LOGGER);
+                throw new GroupCommunicationException(
+                    new ArgumentException("No handler registered with the operator name: " + operatorName));
             }
-            else
-            {
-                handler.OnNext(message);
-            }
+
+            handler.OnNext(message);
         }
 
         /// <summary>
@@ -95,13 +96,34 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
             IObserver<GeneralGroupCommunicationMessage> handler;
             if (!_handlers.TryGetValue(operatorName, out handler))
             {
-                Exceptions.Throw(new ApplicationException("No handler registered yet with the operator name: " + operatorName), LOGGER);
+                throw new GroupCommunicationException(
+                    new ApplicationException("No handler registered yet with the operator name: " + operatorName));
             }
             return handler;
         }
 
+        /// <summary>
+        /// Specifies what to do if error is received. In this case notify 
+        /// to all the obsevers.
+        /// </summary>
+        /// <param name="error">The error message</param>
         public void OnError(Exception error)
         {
+            var exception = error;
+
+            if (!(error is GroupCommunicationException))
+            {
+                if (!(error is NetworkServiceException || error is WakeRemoteException))
+                {
+                    LOGGER.Log(Level.Info,
+                        "Exception should have been of type NetworkServiceException or WakeRemoteException. Wrapping it with GroupCommunicationException.");
+                }
+                exception = new GroupCommunicationException(error);
+            }
+            foreach (var handler in _handlers)
+            {
+                handler.Value.OnError(exception);
+            }
         }
 
         public void OnCompleted()

@@ -72,7 +72,19 @@ namespace Org.Apache.REEF.Network.NetworkService
             // Create and register incoming message handler
             // TODO[REEF-419] This should use the TcpPortProvider mechanism
             var anyEndpoint = new IPEndPoint(IPAddress.Any, 0);
-            _messageHandlerDisposable = _remoteManager.RegisterObserver(anyEndpoint, messageHandler);
+
+            try
+            {
+                _messageHandlerDisposable = _remoteManager.RegisterObserver(anyEndpoint, messageHandler);
+            }
+            catch (Exception e)
+            {
+                if (!(e is WakeRemoteException))
+                {
+                    Logger.Log(Level.Info, "Expected the exception to be of type WakeRemoteException");
+                }
+                throw new StreamingNetworkServiceException(e);
+            }
 
             _nameClient = nameClient;
             _connectionMap = new Dictionary<IIdentifier, IConnection<T>>();
@@ -98,7 +110,8 @@ namespace Org.Apache.REEF.Network.NetworkService
         {
             if (_localIdentifier == null)
             {
-                throw new IllegalStateException("Cannot open connection without first registering an ID");
+                throw new StreamingNetworkServiceException(
+                    new IllegalStateException("Cannot open connection without first registering an ID"));
             }
 
             IConnection<T> connection;
@@ -125,8 +138,15 @@ namespace Org.Apache.REEF.Network.NetworkService
             Logger.Log(Level.Verbose, "Registering id {0} with network service.", id);
 
             _localIdentifier = id;
-            NamingClient.Register(id.ToString(), _remoteManager.LocalEndpoint);
 
+            try
+            {
+                NamingClient.Register(id.ToString(), _remoteManager.LocalEndpoint);
+            }
+            catch (Exception e)
+            {
+                throw new StreamingNetworkServiceException(e);
+            }
             Logger.Log(Level.Verbose, "End of Registering id {0} with network service.", id);
         }
 
@@ -140,9 +160,16 @@ namespace Org.Apache.REEF.Network.NetworkService
                 throw new IllegalStateException("Cannot unregister a non existant identifier");
             }
 
-            NamingClient.Unregister(_localIdentifier.ToString());
-            _localIdentifier = null;
-            _messageHandlerDisposable.Dispose();
+            try
+            {
+                NamingClient.Unregister(_localIdentifier.ToString());
+                _localIdentifier = null;
+                _messageHandlerDisposable.Dispose();
+            }
+            catch (Exception e)
+            {
+                throw new StreamingNetworkServiceException(e);
+            }
         }
 
         /// <summary>

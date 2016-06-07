@@ -345,8 +345,30 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
             return reduceFunction.Reduce(receivedData);
         }
 
+        /// <summary>
+        /// Adds a special error message in message queue of eavch node
+        /// </summary>
+        /// <param name="error">Underlying error</param>
         public void OnError(Exception error)
         {
+            var errorMessage = GroupCommunicationMessage<T>.GenerateErrorMessage(error);
+            lock (_thisLock)
+            {
+                if (_children != null)
+                {
+                    foreach (var node in _children)
+                    {
+                        node.AddData(errorMessage);
+                        _nodesWithData.Add(node);
+                    }
+                }
+
+                if (_parent != null)
+                {
+                    _parent.AddData(errorMessage);
+                    _nodesWithData.Add(_parent);
+                }
+            }
         }
 
         public void OnCompleted()
@@ -426,7 +448,6 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         /// Sends the message to the Task represented by the given NodeStruct.
         /// </summary>
         /// <param name="message">The message to send</param>
-        /// <param name="msgType">The message type</param>
         /// <param name="node">The NodeStruct representing the Task to send to</param>
         private void SendToNode(T message, NodeStruct<T> node)
         {
@@ -440,7 +461,6 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         /// Sends the list of messages to the Task represented by the given NodeStruct.
         /// </summary>
         /// <param name="messages">The list of messages to send</param>
-        /// <param name="msgType">The message type</param>
         /// <param name="node">The NodeStruct representing the Task to send to</param>
         private void SendToNode(IList<T> messages, NodeStruct<T> node)
         {

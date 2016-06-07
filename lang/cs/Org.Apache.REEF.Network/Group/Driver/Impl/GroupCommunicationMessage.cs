@@ -15,21 +15,49 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using Org.Apache.REEF.Tang.Annotations;
 
 namespace Org.Apache.REEF.Network.Group.Driver.Impl
 {
+    /// <summary>
+    /// Specifies the type of Group Communication Message.
+    /// </summary>
+    internal enum GroupCommMessageStatus
+    {
+        Error, // Indicates that its an error message generated due to OnError() call.
+        Data // Indicates that message contains actual data.
+    }
+
     /// <summary>
     /// Messages sent by MPI Operators.
     /// </summary>
     internal sealed class GroupCommunicationMessage<T> : GeneralGroupCommunicationMessage
     {
         /// <summary>
+        /// Static method that return the Group Communication Message with 
+        /// status set to error.
+        /// </summary>
+        /// <returns>Group Communication message</returns>
+        internal static GroupCommunicationMessage<T> GenerateErrorMessage(Exception error)
+        {
+            var message = new GroupCommunicationMessage<T>
+            {
+                Data = null,
+                MessageType = GroupCommMessageStatus.Error,
+                ErrorMessage = new GroupCommunicationErrorMessage(error)
+            };
+
+            return message;
+        }
+      
+        /// <summary>
         /// Empty constructor to allow instantiation by reflection
         /// </summary>
         [Inject]
         private GroupCommunicationMessage()
         {
+            MessageType = GroupCommMessageStatus.Data;
         }
 
         /// <summary>
@@ -49,6 +77,8 @@ namespace Org.Apache.REEF.Network.Group.Driver.Impl
             : base(groupName, operatorName, source, destination)
         {
             Data = new[] { message };
+            MessageType = GroupCommMessageStatus.Data;
+            ErrorMessage = null;
         }
 
         /// <summary>
@@ -68,6 +98,23 @@ namespace Org.Apache.REEF.Network.Group.Driver.Impl
             : base(groupName, operatorName, source, destination)
         {
             Data = message;
+            MessageType = GroupCommMessageStatus.Data;
+            ErrorMessage = null;
+        }
+
+        /// <summary>
+        /// Error message contaning exception in case message type is of
+        /// kind error.
+        /// </summary>
+        internal GroupCommunicationErrorMessage ErrorMessage;
+
+        /// <summary>
+        /// Kind of Group communication message.
+        /// Error or Data
+        /// </summary>
+        internal GroupCommMessageStatus MessageType
+        {
+            get; private set;
         }
 
         /// <summary>

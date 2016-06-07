@@ -223,6 +223,160 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
         }
 
         /// <summary>
+        /// Tests that OnError() of appropriate observer is called if connection is lost.
+        /// </summary>
+        [Fact]
+        public void TestStreamingNetworkServiceReadError()
+        {
+            int sleepTimeinMs = 500;
+            int reTries = 100;
+            int networkServicePort1 = NetworkUtils.GenerateRandomPort(6000, 7000);
+            int networkServicePort2 = NetworkUtils.GenerateRandomPort(7001, 8000);
+
+            using (var nameServer = NameServerTests.BuildNameServer())
+            {
+                IPEndPoint endpoint = nameServer.LocalEndpoint;
+                int nameServerPort = endpoint.Port;
+                string nameServerAddr = endpoint.Address.ToString();
+
+                var handlerConf1 =
+                    TangFactory.GetTang()
+                        .NewConfigurationBuilder()
+                        .BindImplementation(GenericType<IObserver<NsMessage<string>>>.Class,
+                            GenericType<NetworkMessageHandler>.Class)
+                        .Build();
+
+                var handlerConf2 =
+                    TangFactory.GetTang()
+                        .NewConfigurationBuilder()
+                        .BindImplementation(GenericType<IObserver<NsMessage<string>>>.Class,
+                            GenericType<MockObserver<NsMessage<string>>>.Class)
+                        .Build();
+
+                var networkServiceInjection1 = BuildNetworkService(networkServicePort1,
+                    nameServerPort,
+                    nameServerAddr,
+                    handlerConf1);
+
+                var networkServiceInjection2 = BuildNetworkService(networkServicePort2,
+                    nameServerPort,
+                    nameServerAddr,
+                    handlerConf2);
+
+                INetworkService<string> networkService1 =
+                    networkServiceInjection1.GetInstance<StreamingNetworkService<string>>();
+                INetworkService<string> networkService2 =
+                    networkServiceInjection2.GetInstance<StreamingNetworkService<string>>();
+                var observer = networkServiceInjection2.GetInstance<MockObserver<NsMessage<string>>>();
+
+                IIdentifier id1 = new StringIdentifier("service1");
+                IIdentifier id2 = new StringIdentifier("service2");
+                networkService1.Register(id1);
+                networkService2.Register(id2);
+
+                using (IConnection<string> connection = networkService1.NewConnection(id2))
+                {
+                    connection.Open();
+                    connection.Write("abc");
+                    connection.Write("def");
+                    connection.Write("ghi");
+
+                    for (int i = 0; i < reTries; i++)
+                    {
+                        int receivedCount = observer.OnNextCounter;
+                        if (receivedCount == 3)
+                        {
+                            break;
+                        }
+                        Thread.Sleep(sleepTimeinMs);
+                    }
+
+                    if (observer.OnNextCounter != 3)
+                    {
+                        Assert.True(false, "Number of received messages are not equal to 3");
+                    }
+                }
+                networkService1.Dispose();
+
+                for (int i = 0; i < reTries; i++)
+                {
+                    int errorCount = observer.OnErrorCounter;
+                    if (errorCount > 0)
+                    {
+                        Assert.True(observer.ThrownException is WakeRemoteException);                      
+                        return;
+                    }
+                    Thread.Sleep(sleepTimeinMs);
+                }
+                Assert.True(false, "OnError condition not reached in the observer");
+            }
+        }
+
+        /// <summary>
+        /// Tests appropriate exception is caught when writing to a closed connection
+        /// </summary>
+        [Fact]
+        public void TestStreamingNetworkServiceWriteError()
+        {
+            int networkServicePort1 = NetworkUtils.GenerateRandomPort(6000, 7000);
+            int networkServicePort2 = NetworkUtils.GenerateRandomPort(7001, 8000);
+
+            using (var nameServer = NameServerTests.BuildNameServer())
+            {
+                IPEndPoint endpoint = nameServer.LocalEndpoint;
+                int nameServerPort = endpoint.Port;
+                string nameServerAddr = endpoint.Address.ToString();
+
+                var handlerConf1 =
+                    TangFactory.GetTang()
+                        .NewConfigurationBuilder()
+                        .BindImplementation(GenericType<IObserver<NsMessage<string>>>.Class,
+                            GenericType<NetworkMessageHandler>.Class)
+                        .Build();
+
+                var handlerConf2 =
+                    TangFactory.GetTang()
+                        .NewConfigurationBuilder()
+                        .BindImplementation(GenericType<IObserver<NsMessage<string>>>.Class,
+                            GenericType<MessageHandler>.Class)
+                        .Build();
+
+                var networkServiceInjection1 = BuildNetworkService(networkServicePort1,
+                    nameServerPort,
+                    nameServerAddr,
+                    handlerConf1);
+
+                var networkServiceInjection2 = BuildNetworkService(networkServicePort2,
+                    nameServerPort,
+                    nameServerAddr,
+                    handlerConf2);
+
+                INetworkService<string> networkService1 =
+                    networkServiceInjection1.GetInstance<StreamingNetworkService<string>>();
+                INetworkService<string> networkService2 =
+                    networkServiceInjection2.GetInstance<StreamingNetworkService<string>>();
+                var queue = networkServiceInjection2.GetInstance<MessageHandler>().Queue;
+                IIdentifier id1 = new StringIdentifier("service1");
+                IIdentifier id2 = new StringIdentifier("service2");
+                networkService1.Register(id1);
+                networkService2.Register(id2);
+
+                IConnection<string> connection = networkService1.NewConnection(id2);
+                connection.Open();
+                connection.Write("abc");
+                connection.Write("def");
+                connection.Write("ghi");
+
+                Assert.Equal("abc", queue.Take());
+                Assert.Equal("def", queue.Take());
+                Assert.Equal("ghi", queue.Take());
+                networkService2.Dispose();
+                Action send = () => connection.Write("jkl");
+                Assert.Throws<StreamingNetworkServiceException>(send);
+            }
+        }
+
+        /// <summary>
         /// Creates an instance of network service.
         /// </summary>
         /// <param name="networkServicePort">The port that the NetworkService will listen on</param>

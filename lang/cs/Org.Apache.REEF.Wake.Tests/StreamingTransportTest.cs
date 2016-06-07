@@ -15,10 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Reactive;
+using System.Threading;
 using System.Threading.Tasks;
 using Org.Apache.REEF.Tang.Implementations.Tang;
 using Org.Apache.REEF.Tang.Interface;
@@ -153,20 +156,21 @@ namespace Org.Apache.REEF.Wake.Tests
             {
                 server.Run();
 
+                StreamingTransportClient<string>[] clients = new StreamingTransportClient<string>[numEventsExpected / 3];
                 for (int i = 0; i < numEventsExpected / 3; i++)
                 {
+                    var index = i;
                     Task.Run(() =>
                     {
                         IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"),
                             server.LocalEndpoint.Port);
-                        using (
-                            var client = new StreamingTransportClient<string>(remoteEndpoint,
-                                stringCodec,
-                                _tcpClientFactory))
+                        clients[index] = new StreamingTransportClient<string>(remoteEndpoint,
+                            stringCodec,
+                            _tcpClientFactory);
                         {
-                            client.Send("Hello");
-                            client.Send(", ");
-                            client.Send("World!");
+                            clients[index].Send("Hello");
+                            clients[index].Send(", ");
+                            clients[index].Send("World!");
                         }
                     });
                 }
@@ -175,9 +179,181 @@ namespace Org.Apache.REEF.Wake.Tests
                 {
                     events.Add(queue.Take());
                 }
+
+                foreach (var client in clients)
+                {
+                    client.Dispose();
+                }
             }
 
             Assert.Equal(numEventsExpected, events.Count);
+        }
+
+        /// <summary>
+        /// Tests whether StreamingTransportClient's Send function 
+        /// throws right exception if link or connection is ended prematurely.
+        /// Also tests if OnError() call is rightly executed at the server side.
+        /// </summary>
+        [Fact]
+        public void TestClientWriteErrorAndServerOnError()
+        {
+            IStreamingCodec<string> stringCodec = _injector.GetInstance<StringStreamingCodec>();
+            IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, 0);
+            var remoteHandler = new MockObserver<TransportEvent<string>>();
+
+            using (
+                var server = new StreamingTransportServer<string>(endpoint.Address,
+                    remoteHandler,
+                    _tcpPortProvider,
+                    stringCodec))
+            {
+                server.Run();
+
+                IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), server.LocalEndpoint.Port);
+                var client = new StreamingTransportClient<string>(remoteEndpoint, stringCodec, _tcpClientFactory);
+                client.Send("Hello");
+                client.Send(", ");
+                client.Link.Dispose();
+                Action send = () => client.Send("World");
+                Assert.Throws<StreamingTransportLayerException>(send);
+
+                int sleepTimeinMs = 500;
+                int reTries = 100;
+
+                for (int i = 0; i < reTries; i++)
+                {
+                    int errorCount = remoteHandler.OnErrorCounter;
+                    if (errorCount > 0)
+                    {
+                        Assert.True(remoteHandler.ThrownException is StreamingTransportLayerExceptionWithEndPoint);
+                        Assert.NotNull(remoteHandler.ThrownException.InnerException);
+                        Assert.True(remoteHandler.ThrownException.InnerException is StreamingLinkException);
+                        return;
+                    }
+                    Thread.Sleep(sleepTimeinMs);
+                }
+                Assert.True(false, "OnError condition in StreamingTransportServer not reached");
+            }
+        }
+
+        /// <summary>
+        /// Tests whether OnError() call is rightly executed at the server 
+        /// side if Client completes itself.
+        /// </summary>
+        [Fact]
+        public void TestServerOnError()
+        {
+            IStreamingCodec<string> stringCodec = _injector.GetInstance<StringStreamingCodec>();
+            IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, 0);
+            var remoteHandler = new MockObserver<TransportEvent<string>>();
+
+            int sleepTimeinMs = 500;
+            int reTries = 100;
+            using (
+                var server = new StreamingTransportServer<string>(endpoint.Address,
+                    remoteHandler,
+                    _tcpPortProvider,
+                    stringCodec))
+            {
+                server.Run();
+
+                IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), server.LocalEndpoint.Port);
+                using (
+                    var client = new StreamingTransportClient<string>(remoteEndpoint,
+                        stringCodec,
+                        _tcpClientFactory))
+                {
+                    client.Send("Hello");
+                    client.Send(", ");
+                    client.Send("World");
+
+                    for (int i = 0; i < reTries; i++)
+                    {
+                        int receivedCount = remoteHandler.OnNextCounter;
+                        if (receivedCount == 3)
+                        {
+                            break;
+                        }
+                        Thread.Sleep(sleepTimeinMs);
+                    }
+
+                    if (remoteHandler.OnNextCounter != 3)
+                    {
+                        Assert.True(false, "Number of received messages are not equal to 3");
+                    }
+                }
+
+                for (int i = 0; i < reTries; i++)
+                {
+                    int errorCount = remoteHandler.OnErrorCounter;
+                    if (errorCount > 0)
+                    {
+                        Assert.True(remoteHandler.ThrownException is StreamingTransportLayerExceptionWithEndPoint);
+                        Assert.NotNull(remoteHandler.ThrownException.InnerException);
+                        Assert.True(remoteHandler.ThrownException.InnerException is StreamingLinkException);
+                        return;
+                    }
+                    Thread.Sleep(sleepTimeinMs);
+                }
+                Assert.True(false, "OnError condition in StreamingTransportServer not reached");
+            }
+        }
+
+        /// <summary>
+        /// Tests whether OnCompleted() call is rightly executed at the server 
+        /// side if it disposes itself before client.
+        /// </summary>
+        [Fact]
+        public void TestServerOnCompleted()
+        {
+            IStreamingCodec<string> stringCodec = _injector.GetInstance<StringStreamingCodec>();
+            IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, 0);
+            var remoteHandler = new MockObserver<TransportEvent<string>>();
+
+            int sleepTimeinMs = 500;
+            int reTries = 100;
+            var server = new StreamingTransportServer<string>(endpoint.Address,
+                remoteHandler,
+                _tcpPortProvider,
+                stringCodec);
+            server.Run();
+
+            IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), server.LocalEndpoint.Port);
+            var client = new StreamingTransportClient<string>(remoteEndpoint,
+                stringCodec,
+                _tcpClientFactory);
+
+            client.Send("Hello");
+            client.Send(", ");
+            client.Send("World");
+
+            for (int i = 0; i < reTries; i++)
+            {
+                int receivedCount = remoteHandler.OnNextCounter;
+                if (receivedCount == 3)
+                {
+                    break;
+                }
+                Thread.Sleep(sleepTimeinMs);
+            }
+
+            if (remoteHandler.OnNextCounter != 3)
+            {
+                Assert.True(false, "Number of received messages are not equal to 3");
+            }
+
+            server.Dispose();
+            for (int i = 0; i < reTries; i++)
+            {
+                int completedCount = remoteHandler.OnCompletedCounter;
+                if (completedCount > 0)
+                {
+                    return;
+                }
+                Thread.Sleep(sleepTimeinMs);
+            }
+
+            Assert.True(false, "OnCompleted condition in StreamingTransportServer not reached");
         }
 
         private static ITcpPortProvider GetTcpProvider(int portRangeStart, int portRangeEnd)

@@ -15,14 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using Org.Apache.REEF.Network.Group;
 using Org.Apache.REEF.Network.Group.Config;
 using Org.Apache.REEF.Network.Group.Driver;
+using Org.Apache.REEF.Network.Group.Driver.Impl;
 using Org.Apache.REEF.Network.Group.Operators;
 using Org.Apache.REEF.Network.Group.Operators.Impl;
 using Org.Apache.REEF.Network.Group.Pipelining.Impl;
 using Org.Apache.REEF.Network.Group.Topology;
+using Org.Apache.REEF.Network.NetworkService;
 using Org.Apache.REEF.Tang.Interface;
 using Org.Apache.REEF.Tang.Util;
 using Org.Apache.REEF.Wake.StreamingCodec.CommonStreamingCodecs;
@@ -102,6 +107,85 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
             Assert.Equal(45, receiver.Reduce());
         }
 
+        /// <summary>
+        /// Tests that if a node fails in broadcast, the children of the nodes receive the 
+        /// error message upstream and come out.
+        /// </summary>       
+        [Fact]
+        public void TestReduceOperatorException()
+        {
+            string groupName = "group1";
+            string operatorName = "reduce";
+            int numTasks = 10;
+            string driverId = "driverId";
+            string masterTaskId = "task0";
+            int fanOut = 2;
+
+            var groupCommDriver = GroupCommunicationTests.GetInstanceOfGroupCommDriver(driverId, masterTaskId, groupName, fanOut, numTasks);
+
+            ICommunicationGroupDriver commGroup = groupCommDriver.DefaultGroup
+                .AddReduce<int>(operatorName, masterTaskId, TopologyTypes.Tree, GetDefaultDataConverterConfig(), GetDefaultReduceFuncConfig())
+                .Build();
+
+            List<StreamingNetworkService<GeneralGroupCommunicationMessage>> networkServiceList;
+            var commGroups = GroupCommunicationTests.GroupCommunicationClients(groupName,
+                numTasks,
+                groupCommDriver,
+                commGroup,
+                GetDefaultCodecConfig(),
+                out networkServiceList);
+
+            IReduceReceiver<int> receiver = commGroups[0].GetReduceReceiver<int>(operatorName);
+            IReduceSender<int> sender1 = commGroups[1].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender2 = commGroups[2].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender3 = commGroups[3].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender4 = commGroups[4].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender5 = commGroups[5].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender6 = commGroups[6].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender7 = commGroups[7].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender8 = commGroups[8].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender9 = commGroups[9].GetReduceSender<int>(operatorName);
+
+            Assert.NotNull(receiver);
+            Assert.NotNull(sender1);
+            Assert.NotNull(sender2);
+            Assert.NotNull(sender3);
+            Assert.NotNull(sender4);
+            Assert.NotNull(sender5);
+            Assert.NotNull(sender6);
+            Assert.NotNull(sender7);
+            Assert.NotNull(sender8);
+            Assert.NotNull(sender9);
+
+            sender9.Send(9);
+            sender8.Send(8);
+            sender7.Send(7);
+            sender6.Send(6);
+            sender5.Send(5);
+            sender4.Send(4);
+            sender3.Send(3);
+            sender2.Send(2);
+            sender1.Send(1);
+
+            Assert.Equal(45, receiver.Reduce());
+
+            networkServiceList[1].Dispose();
+            networkServiceList[5].Dispose();
+            networkServiceList[7].Dispose();
+
+            // sender 2 is sender 5 parent
+            Action send1 = () => sender2.Send(2);
+           
+            // sender 3 is sender 7 parent
+            Action send2 = () => sender3.Send(3);
+            
+            // master is sender 1 parent
+            Action receive1 = () => receiver.Reduce();
+            Assert.Throws<GroupCommunicationException>(send1);
+            Assert.Throws<GroupCommunicationException>(send2);
+            Assert.Throws<GroupCommunicationException>(receive1);
+        }
+      
         [Fact]
         public void TestBroadcastOperator()
         {
@@ -177,6 +261,105 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
             Assert.Equal(value3, receiver7.Receive());
             Assert.Equal(value3, receiver8.Receive());
             Assert.Equal(value3, receiver9.Receive());
+        }
+
+        /// <summary>
+        /// Tests that if a node fails in broadcast, the children of the nodes receive the 
+        /// error message upstream and come out.
+        /// </summary>
+        [Fact]
+        public void TestBroadcastOperatorException()
+        {
+            string groupName = "group1";
+            string operatorName = "broadcast";
+            string driverId = "driverId";
+            string masterTaskId = "task0";
+            int numTasks = 10;
+            int value1 = 1337;
+            int fanOut = 2;
+
+            var groupCommDriver = GroupCommunicationTests.GetInstanceOfGroupCommDriver(driverId, masterTaskId, groupName, fanOut, numTasks);
+
+            ICommunicationGroupDriver commGroup = groupCommDriver.DefaultGroup
+                .AddBroadcast<int>(operatorName, masterTaskId, TopologyTypes.Tree, GetDefaultDataConverterConfig(), GetDefaultReduceFuncConfig())
+                .Build();
+
+            List<StreamingNetworkService<GeneralGroupCommunicationMessage>> networkServiceList;
+            var commGroups = GroupCommunicationTests.GroupCommunicationClients(groupName,
+                numTasks,
+                groupCommDriver,
+                commGroup,
+                GetDefaultCodecConfig(),
+                out networkServiceList);
+
+            IBroadcastSender<int> sender = commGroups[0].GetBroadcastSender<int>(operatorName);
+            IBroadcastReceiver<int> receiver1 = commGroups[1].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver2 = commGroups[2].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver3 = commGroups[3].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver4 = commGroups[4].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver5 = commGroups[5].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver6 = commGroups[6].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver7 = commGroups[7].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver8 = commGroups[8].GetBroadcastReceiver<int>(operatorName);
+            IBroadcastReceiver<int> receiver9 = commGroups[9].GetBroadcastReceiver<int>(operatorName);
+
+            Assert.NotNull(sender);
+            Assert.NotNull(receiver1);
+            Assert.NotNull(receiver2);
+            Assert.NotNull(receiver3);
+            Assert.NotNull(receiver4);
+            Assert.NotNull(receiver5);
+            Assert.NotNull(receiver6);
+            Assert.NotNull(receiver7);
+            Assert.NotNull(receiver8);
+            Assert.NotNull(receiver9);
+
+            sender.Send(value1);
+            Assert.Equal(value1, receiver1.Receive());
+            Assert.Equal(value1, receiver2.Receive());
+            Assert.Equal(value1, receiver3.Receive());
+            Assert.Equal(value1, receiver4.Receive());
+            Assert.Equal(value1, receiver5.Receive());
+            Assert.Equal(value1, receiver6.Receive());
+            Assert.Equal(value1, receiver7.Receive());
+            Assert.Equal(value1, receiver8.Receive());
+            Assert.Equal(value1, receiver9.Receive());
+
+            networkServiceList[3].Dispose();
+            networkServiceList[2].Dispose();
+            networkServiceList[1].Dispose();
+
+            // 7 and 8 are children of 3 and listening on them.
+            Action receive1 = () => { receiver7.Receive(); };
+            Action receive2 = () => { receiver8.Receive(); };
+            
+            // 5 and 6 are children of 2
+            Action receive3 = () => { receiver5.Receive(); };
+            Action receive4 = () => { receiver6.Receive(); };
+            Assert.Throws<GroupCommunicationException>(receive1);
+            Assert.Throws<GroupCommunicationException>(receive2);
+            Assert.Throws<GroupCommunicationException>(receive3);
+            Assert.Throws<GroupCommunicationException>(receive4);
+
+            int retries = 100;
+            int sleepTimeInMs = 500;
+            for (int i = 0; i < retries; i++)
+            {
+                try
+                {
+                    sender.Send(1);
+                }
+                catch (Exception e)
+                {
+                    if (e is GroupCommunicationException)
+                    {
+                        return;
+                    }
+                    Assert.True(false, "Exception happended but it is not of type GroupCommunicationException");
+                }
+                Thread.Sleep(sleepTimeInMs);
+            }
+            Assert.True(false, "No exception was thrown even when several send tries were done");
         }
 
         [Fact]

@@ -21,7 +21,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Org.Apache.REEF.Tang.Exceptions;
-using Org.Apache.REEF.Utilities.Diagnostics;
 using Org.Apache.REEF.Utilities.Logging;
 using Org.Apache.REEF.Wake.StreamingCodec;
 using Org.Apache.REEF.Wake.Util;
@@ -62,10 +61,18 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (remoteEndpoint == null)
             {
-                throw new ArgumentNullException("remoteEndpoint");
+                throw new StreamingLinkException(new ArgumentNullException("remoteEndpoint"));
             }
 
-            _client = tcpClientFactory.Connect(remoteEndpoint);
+            try
+            {
+                _client = tcpClientFactory.Connect(remoteEndpoint);
+            }
+            catch (Exception e)
+            {
+                throw new StreamingLinkException(e);
+            }
+
             var stream = _client.GetStream();
             _localEndpoint = GetLocalEndpoint();
             _disposed = false;
@@ -84,7 +91,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (client == null)
             {
-                throw new ArgumentNullException("client");
+                throw new StreamingLinkException(new ArgumentNullException("client"));
             }
 
             _client = client;
@@ -120,14 +127,26 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (value == null)
             {
-                throw new ArgumentNullException("value");
+                throw new StreamingLinkException(new ArgumentNullException("value"));
             }
+            
             if (_disposed)
             {
-                Exceptions.Throw(new IllegalStateException("StreamingLink has been closed."), Logger);
+                throw new StreamingLinkException(new IllegalStateException("StreamingLink has been closed."));
             }
 
-            _streamingCodec.Write(value, _writer);
+            try
+            {
+                _streamingCodec.Write(value, _writer);
+            }
+            catch (Exception e)
+            {
+                if (e is StreamingLinkException)
+                {
+                    throw;
+                }
+                throw new StreamingLinkException(e);
+            }
         }
 
         /// <summary>
@@ -139,7 +158,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (_disposed)
             {
-                Exceptions.Throw(new IllegalStateException("StreamingLink has been closed."), Logger);
+                throw new StreamingLinkException(new IllegalStateException("StreamingLink has been closed."));
             }
 
             await _streamingCodec.WriteAsync(value, _writer, token);
@@ -152,7 +171,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (_disposed)
             {
-                Exceptions.Throw(new IllegalStateException("Link has been disposed."), Logger);
+                throw new StreamingLinkException(new IllegalStateException("Link has been disposed."));
             }
 
             try
@@ -163,8 +182,12 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             catch (Exception e)
             {
                 Logger.Log(Level.Warning, "In Read function unable to read the message.");
-                Exceptions.CaughtAndThrow(e, Level.Error, Logger);
-                throw;
+
+                if (e is StreamingLinkException)
+                {
+                    throw;
+                }
+                throw new StreamingLinkException(e);
             }
         }
 
@@ -176,7 +199,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (_disposed)
             {
-                Exceptions.Throw(new IllegalStateException("Link has been disposed."), Logger);
+                throw new StreamingLinkException(new IllegalStateException("Link has been disposed."));
             }
 
             try
@@ -187,8 +210,11 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             catch (Exception e)
             {
                 Logger.Log(Level.Warning, "In ReadAsync function unable to read the message.");
-                Exceptions.CaughtAndThrow(e, Level.Error, Logger);
-                throw;
+                if (e is StreamingLinkException)
+                {
+                    throw;
+                }
+                throw new StreamingLinkException(e);
             }
         }
 

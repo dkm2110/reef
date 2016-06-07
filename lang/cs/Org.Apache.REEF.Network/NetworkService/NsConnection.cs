@@ -77,7 +77,8 @@ namespace Org.Apache.REEF.Network.NetworkService
             IPEndPoint destAddr = _nameClient.CacheLookup(_destId.ToString());
             if (destAddr == null)
             {
-                throw new RemotingException("Cannot register Identifier with NameService");
+                throw new StreamingNetworkServiceException(
+                    new RemotingException("Cannot register Identifier with NameService"));
             }
 
             try
@@ -85,15 +86,14 @@ namespace Org.Apache.REEF.Network.NetworkService
                 _remoteSender = _remoteManager.GetRemoteObserver(destAddr);
                 LOGGER.Log(Level.Verbose, "Network service completed connection to {0}.", destStr);
             }
-            catch (SocketException)
+            catch (Exception e)
             {
                 LOGGER.Log(Level.Error, "Network Service cannot open connection to " + destAddr);
-                throw;
-            }
-            catch (ObjectDisposedException)
-            {
-                LOGGER.Log(Level.Error, "Network Service cannot open connection to " + destAddr);
-                throw;
+                if (!(e is WakeRemoteException))
+                {
+                    LOGGER.Log(Level.Info, "Expected the exception to be of type WakeRemoteException");
+                }
+                throw new StreamingNetworkServiceException(e);
             }
         }
 
@@ -105,22 +105,22 @@ namespace Org.Apache.REEF.Network.NetworkService
         {
             if (_remoteSender == null)
             {
-                throw new IllegalStateException("NsConnection has not been opened yet."); 
+                throw new StreamingNetworkServiceException(
+                    new IllegalStateException("NsConnection has not been opened yet."));
             }
 
             try
             {
                 _remoteSender.OnNext(new NsMessage<T>(_sourceId, _destId, message));
             }
-            catch (IOException)
+            catch (Exception e)
             {
                 LOGGER.Log(Level.Error, "Network Service cannot write message to {0}", _destId);
-                throw;
-            }
-            catch (ObjectDisposedException)
-            {
-                LOGGER.Log(Level.Error, "Network Service cannot write message to {0}", _destId);
-                throw;
+                if (!(e is WakeRemoteException))
+                {
+                    LOGGER.Log(Level.Info, "Expected the exception to be of type WakeRemoteException");
+                }
+                throw new StreamingNetworkServiceException(e);
             }
         }
 

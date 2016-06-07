@@ -57,6 +57,10 @@ under the License.
     <Compile Include="Remote\Impl\DefaultLocalAddressProvider.cs" />
     <Compile Include="Remote\Impl\LoopbackLocalAddressProvider.cs" />
     <Compile Include="Remote\Impl\RemoteEventStreamingCodec.cs" />
+    <Compile Include="Remote\Impl\StreamingRemoteManagerException.cs" />
+    <Compile Include="Remote\Impl\StreamingTransportLayerExceptionWithEndPoint.cs" />
+    <Compile Include="Remote\Impl\StreamingTransportLayerException.cs" />
+    <Compile Include="Remote\Impl\StreamingLinkException.cs" />
     <Compile Include="Remote\Impl\StreamingRemoteManagerFactory.cs" />
     <Compile Include="Remote\Impl\DefaultRemoteManagerFactory.cs" />
     <Compile Include="Impl\LoggingEventHandler.cs" />
@@ -130,6 +134,7 @@ under the License.
     <Compile Include="Remote\RemoteConfiguration.cs" />
     <Compile Include="Remote\RemoteRuntimeException.cs" />
     <Compile Include="Remote\TcpPortProvider.cs" />
+    <Compile Include="Remote\WakeRemoteException.cs" />
     <Compile Include="RX\AbstractObserver.cs" />
     <Compile Include="RX\AbstractRxStage.cs" />
     <Compile Include="RX\Impl\PubSubSubject.cs" />

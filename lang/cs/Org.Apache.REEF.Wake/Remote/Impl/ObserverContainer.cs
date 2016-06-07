@@ -106,16 +106,51 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                 handled = true;
             }
 
+            // The exceptions being thrown in OnNext are indicative of bugs in REEF 
+            // or wrong user code like codecs. It is not a good practice to expect 
+            // to handle exceptions in OnNext calls.
+            // https://msdn.microsoft.com/en-us/library/ff519622(v=vs.110).aspx
+            // So there is no need to propagate these exceptions to the upstream observers 
+            // or downstream callers.
             if (!handled)
             {
-                throw new WakeRuntimeException("Unrecognized Wake RemoteEvent message");
+                throw new WakeRemoteException("Unrecognized Wake RemoteEvent message");
             }
         }
 
+        /// <summary>
+        /// Specifies what to do in case an error is received. Semantics is following: 
+        /// If a remote endpoint is received, error is sent to appropriate observer 
+        /// only. However, if corresponding observer is registered by message type, 
+        /// it is not possible to infer the type at runtime. Hence, it is supressed.
+        /// Moreover, if exception is not of type StreamingTransportLayerExceptionWithEndPoint 
+        /// it is again supressed.
+        /// </summary>
+        /// <param name="error">The exception type.</param>
         public void OnError(Exception error)
         {
+            var exceptionWithEndPoint = error as StreamingTransportLayerExceptionWithEndPoint;
+            if (exceptionWithEndPoint != null)
+            {
+                var remoteEndPoint = exceptionWithEndPoint.RemoteEndPoint;
+                IObserver<T> observer1;
+
+                if (_universalObserver != null)
+                {
+                    _universalObserver.OnError(exceptionWithEndPoint);
+                }
+
+                if (_endpointMap.TryGetValue(remoteEndPoint, out observer1))
+                {
+                    // IObserver was registered by IPEndpoint
+                    observer1.OnError(error);
+                }
+            }
         }
 
+        /// <summary>
+        /// Ignore when we receive OnCompleted() Signal.
+        /// </summary>
         public void OnCompleted()
         {
         }

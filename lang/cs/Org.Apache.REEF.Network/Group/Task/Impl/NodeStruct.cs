@@ -52,7 +52,14 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         /// <returns>The first available message.</returns>
         internal T[] GetData()
         {
-            return _messageQueue.Take().Data;
+            var message = _messageQueue.Take();
+            if (message.MessageType == GroupCommMessageStatus.Data)
+            {
+                return message.Data;
+            }
+
+            throw new GroupCommunicationException("Received an error message in Group Communication",
+                message.ErrorMessage.UnderlyingException);
         }
 
         /// <summary>

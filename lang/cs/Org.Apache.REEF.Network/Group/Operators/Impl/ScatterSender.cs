@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using System.Collections.Generic;
 using System.Reactive;
 using Org.Apache.REEF.Network.Group.Config;
@@ -61,7 +62,8 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             _topology = topology;
             _initialize = initialize;
 
-            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(message => topology.OnNext(message));
+            var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(topology.OnNext,
+                topology.OnError);
             networkHandler.Register(operatorName, msgHandler);
         }
 
@@ -102,7 +104,19 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// the order in which to scatter each sublist</param>
         public void Send(List<T> elements, List<string> order)
         {
-            _topology.ScatterToChildren(elements, order, MessageType.Data);
+            try
+            {
+                _topology.ScatterToChildren(elements, order, MessageType.Data);
+            }
+            catch (Exception e)
+            {
+                var error = e;
+                if (!(e is GroupCommunicationException))
+                {
+                    error = new GroupCommunicationException(e);
+                }
+                throw error;
+            }
         }
 
         /// <summary>

@@ -22,6 +22,7 @@ using Org.Apache.REEF.Network.Group.Driver.Impl;
 using Org.Apache.REEF.Network.NetworkService;
 using Org.Apache.REEF.Tang.Annotations;
 using Org.Apache.REEF.Utilities.Logging;
+using Org.Apache.REEF.Wake.Remote;
 
 namespace Org.Apache.REEF.Network.Group.Task.Impl
 {
@@ -52,26 +53,36 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         /// <param name="nsMessage"></param>
         public void OnNext(NsMessage<GeneralGroupCommunicationMessage> nsMessage)
         {
+            // The exceptions being thrown in OnNext are indicative of bugs in REEF 
+            // or wrong user code like codecs. It is not a good practice to expect 
+            // to handle exceptions in OnNext calls.
+            // https://msdn.microsoft.com/en-us/library/ff519622(v=vs.110).aspx
+            // So there is no need to propagate these exceptions up to group 
+            // communicaton operator calls.
             if (nsMessage == null)
             {
-                throw new ArgumentNullException("nsMessage");
+                throw new GroupCommunicationException(new ArgumentNullException("nsMessage"));
             }
 
+            IObserver<GeneralGroupCommunicationMessage> observer = null;
+            GeneralGroupCommunicationMessage gcm = null;
             try
             {
-                GeneralGroupCommunicationMessage gcm = nsMessage.Data.First();
-                _commGroupHandlers[gcm.GroupName].OnNext(gcm);
+                gcm = nsMessage.Data.First();
+                observer = _commGroupHandlers[gcm.GroupName];
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException e)
             {
                 LOGGER.Log(Level.Error, "Group Communication Network Handler received message with no data");
-                throw;
+                throw new GroupCommunicationException(e);
             }
-            catch (KeyNotFoundException)
+            catch (KeyNotFoundException e)
             {
                 LOGGER.Log(Level.Error, "Group Communication Network Handler received message for nonexistant group");
-                throw;
+                throw new GroupCommunicationException(e);
             }
+
+            observer.OnNext(gcm);
         }
 
         /// <summary>
@@ -86,18 +97,39 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (string.IsNullOrEmpty(groupName))
             {
-                throw new ArgumentNullException("groupName");
+                throw new GroupCommunicationException(new ArgumentNullException("groupName"));
             }
             if (commGroupHandler == null)
             {
-                throw new ArgumentNullException("commGroupHandler");
+                throw new GroupCommunicationException(new ArgumentNullException("commGroupHandler"));
             }
 
             _commGroupHandlers[groupName] = commGroupHandler;
         }
 
+        /// <summary>
+        /// Specifies what to do if error is received. In this case notify 
+        /// to all the obsevers.
+        /// </summary>
+        /// <param name="error">The error message</param>
         public void OnError(Exception error)
         {
+            var exception = error;
+
+            if (!(error is GroupCommunicationException))
+            {
+                if (!(error is NetworkServiceException || error is WakeRemoteException))
+                {
+                    LOGGER.Log(Level.Info,
+                        "Exception should have been of type NetworkServiceException or WakeRemoteException. Wrapping it with GroupCommunicationException.");
+                }
+                exception = new GroupCommunicationException(error);
+            }
+
+            foreach (var handler in _commGroupHandlers)
+            {
+                handler.Value.OnError(exception);
+            }
         }
 
         public void OnCompleted()

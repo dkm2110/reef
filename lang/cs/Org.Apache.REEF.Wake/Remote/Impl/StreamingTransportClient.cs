@@ -35,6 +35,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         private readonly IObserver<TransportEvent<T>> _observer;
         private readonly CancellationTokenSource _cancellationSource;
         private bool _disposed;
+        private readonly IPEndPoint _remoteEndPoint;
         private static readonly Logger Logger = Logger.GetLogger(typeof(StreamingTransportClient<T>));
 
         /// <summary>
@@ -44,11 +45,18 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// <param name="remoteEndpoint">The endpoint of the remote server to connect to</param>
         /// <param name="streamingCodec">Streaming codec</param>
         /// <param name="clientFactory">TcpClient factory</param>
-        internal StreamingTransportClient(IPEndPoint remoteEndpoint, IStreamingCodec<T> streamingCodec, ITcpClientConnectionFactory clientFactory)
+        internal StreamingTransportClient(IPEndPoint remoteEndpoint,
+            IStreamingCodec<T> streamingCodec,
+            ITcpClientConnectionFactory clientFactory)
         {
-            Exceptions.ThrowIfArgumentNull(remoteEndpoint, "remoteEndpoint", Logger);
+            if (remoteEndpoint == null)
+            {
+                throw new StreamingTransportLayerException("In client: Endpoint is null",
+                    new ArgumentNullException("remoteEndpoint"));
+            }
 
             _link = new StreamingLink<T>(remoteEndpoint, streamingCodec, clientFactory);
+            _remoteEndPoint = _link.RemoteEndpoint;
             _cancellationSource = new CancellationTokenSource();
             _disposed = false;
         }
@@ -63,7 +71,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// <param name="clientFactory">TcpClient factory</param>
         internal StreamingTransportClient(IPEndPoint remoteEndpoint,
             IObserver<TransportEvent<T>> observer,
-            IStreamingCodec<T> streamingCodec, 
+            IStreamingCodec<T> streamingCodec,
             ITcpClientConnectionFactory clientFactory)
             : this(remoteEndpoint, streamingCodec, clientFactory)
         {
@@ -87,10 +95,23 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (message == null)
             {
-                throw new ArgumentNullException("message");
+                throw new StreamingTransportLayerException("In client: message to be sent is null",
+                    new ArgumentNullException("message"));
             }
 
-            _link.Write(message);
+            try
+            {
+                _link.Write(message);
+            }
+            catch (Exception e)
+            {
+                if (!(e is WakeRemoteException))
+                {
+                    Logger.Log(Level.Info,
+                    "Exception should have been of type WakeRemoteException. Wrapping it with WakeRemoteException.");
+                }
+                throw new StreamingTransportLayerException("Error in client.", e);                
+            }
         }
 
         /// <summary>
@@ -113,14 +134,47 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             while (!_cancellationSource.IsCancellationRequested)
             {
-                T message = await _link.ReadAsync(_cancellationSource.Token);
-                if (message == null)
+                try
                 {
+                    T message = await _link.ReadAsync(_cancellationSource.Token);
+                    if (message == null)
+                    {
+                        if (_cancellationSource.IsCancellationRequested)
+                        {
+                            _observer.OnCompleted();
+                        }
+                        else
+                        {
+                            _observer.OnError(
+                                new StreamingTransportLayerExceptionWithEndPoint(
+                                    new Exception("Message received in StreamingTransportClient is null"),
+                                    _remoteEndPoint));
+                        }
+                        break;
+                    }
+
+                    TransportEvent<T> transportEvent = new TransportEvent<T>(message, _link);
+                    _observer.OnNext(transportEvent);
+                }
+                catch (Exception e)
+                {
+                    if (_cancellationSource.IsCancellationRequested)
+                    {
+                        _observer.OnCompleted();
+                    }
+                    else
+                    {
+                        if (!(e is WakeRemoteException))
+                        {
+                            Logger.Log(Level.Info,
+                                "Exception should have been of type WakeRemoteException. Wrapping it with WakeRemoteException.");
+                        }
+                        _observer.OnError(new StreamingTransportLayerExceptionWithEndPoint("Error in client.",
+                            e,
+                            _remoteEndPoint));
+                    }
                     break;
                 }
-
-                TransportEvent<T> transportEvent = new TransportEvent<T>(message, _link);
-                _observer.OnNext(transportEvent);
             }
         }
     }
