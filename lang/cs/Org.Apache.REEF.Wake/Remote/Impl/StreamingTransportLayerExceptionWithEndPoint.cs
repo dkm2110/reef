@@ -33,7 +33,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// <param name="message">The error message given by the user.</param>
         /// <param name="innerException">The inner exception that is the cause of error.</param>
         /// <param name="remoteEndPoint">The remote end point related to the error.</param>
-        public StreamingTransportLayerExceptionWithEndPoint(string message,
+        internal StreamingTransportLayerExceptionWithEndPoint(string message,
             Exception innerException,
             IPEndPoint remoteEndPoint) : base(message, innerException)
         {
@@ -45,7 +45,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// </summary>
         /// <param name="innerException">The inner exception that is the cause of error.</param>
         /// <param name="remoteEndPoint">The remote end point related to the error.</param>       
-        public StreamingTransportLayerExceptionWithEndPoint(Exception innerException,
+        internal StreamingTransportLayerExceptionWithEndPoint(Exception innerException,
             IPEndPoint remoteEndPoint)
             : base(innerException)
         {

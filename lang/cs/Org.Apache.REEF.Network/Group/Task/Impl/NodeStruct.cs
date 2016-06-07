@@ -15,7 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System;
 using System.Collections.Concurrent;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
 
@@ -47,7 +46,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         internal string Identifier { get; private set; }
 
         /// <summary>
-        /// Gets the first message in the message queue.
+        /// Gets the first message in the message queue. Throws exception 
+        /// if message is of type error.
         /// </summary>
         /// <returns>The first available message.</returns>
         internal T[] GetData()

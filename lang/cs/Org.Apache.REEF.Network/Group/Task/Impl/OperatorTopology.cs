@@ -147,17 +147,18 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (gcm == null)
             {
-                throw new ArgumentNullException("gcm");
+                throw new GroupCommunicationException(new ArgumentNullException("gcm"));
             }
             if (gcm.Source == null)
             {
-                throw new ArgumentException("Message must have a source");
+                throw new GroupCommunicationException(new ArgumentException("Message must have a source"));
             }
 
             var sourceNode = FindNode(gcm.Source);
             if (sourceNode == null)
             {
-                throw new IllegalStateException("Received message from invalid task id: " + gcm.Source);
+                throw new GroupCommunicationException(
+                    new IllegalStateException("Received message from invalid task id: " + gcm.Source));
             }
 
             lock (_thisLock)
@@ -167,7 +168,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
 
                 if (message == null)
                 {
-                    throw new NullReferenceException("message passed not of type GroupCommunicationMessage");
+                    throw new GroupCommunicationException(
+                        new NullReferenceException("message passed not of type GroupCommunicationMessage"));
                 }
 
                 sourceNode.AddData(message);
@@ -183,7 +185,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (_parent == null)
             {
-                throw new ArgumentException("No parent for node");
+                throw new GroupCommunicationException(new ArgumentException("No parent for node"));
             }
 
             SendToNode(message, _parent);
@@ -198,7 +200,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (message == null)
             {
-                throw new ArgumentNullException("message");
+                throw new GroupCommunicationException(new ArgumentNullException("message"));
             }
 
             foreach (var child in _children)
@@ -217,7 +219,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (messages == null)
             {
-                throw new ArgumentNullException("messages");
+                throw new GroupCommunicationException(new ArgumentNullException("messages"));
             }
             if (_children.Count <= 0)
             {
@@ -239,11 +241,11 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (messages == null)
             {
-                throw new ArgumentNullException("messages");
+                throw new GroupCommunicationException(new ArgumentNullException("messages"));
             }
             if (count <= 0)
             {
-                throw new ArgumentException("Count must be positive");
+                throw new GroupCommunicationException(new ArgumentException("Count must be positive"));
             }
 
             ScatterHelper(messages, _children, count);
@@ -260,11 +262,13 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (messages == null)
             {
-                throw new ArgumentNullException("messages");
+                throw new GroupCommunicationException(new ArgumentNullException("messages"));
             }
             if (order == null || order.Count != _children.Count)
             {
-                throw new ArgumentException("order cannot be null and must have the same number of elements as child tasks");
+                throw new GroupCommunicationException(
+                    new ArgumentException(
+                        "order cannot be null and must have the same number of elements as child tasks"));
             }
 
             List<NodeStruct<T>> nodes = new List<NodeStruct<T>>();
@@ -273,7 +277,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
                 NodeStruct<T> node = FindNode(taskId);
                 if (node == null)
                 {
-                    throw new IllegalStateException("Received message from invalid task id: " + taskId);
+                    throw new GroupCommunicationException(
+                        new IllegalStateException("Received message from invalid task id: " + taskId));
                 }
 
                 nodes.Add(node);
@@ -292,7 +297,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
             T[] data = ReceiveFromNode(_parent);
             if (data == null || data.Length != 1)
             {
-                throw new InvalidOperationException("Cannot receive data from parent node");
+                throw new GroupCommunicationException(
+                    new InvalidOperationException("Cannot receive data from parent node"));
             }
 
             return data[0];
@@ -303,7 +309,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
             T[] data = ReceiveFromNode(_parent);
             if (data == null || data.Length == 0)
             {
-                throw new InvalidOperationException("Cannot receive data from parent node");
+                throw new GroupCommunicationException(
+                    new InvalidOperationException("Cannot receive data from parent node"));
             }
 
             return data.ToList();
@@ -319,7 +326,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (reduceFunction == null)
             {
-                throw new ArgumentNullException("reduceFunction");
+                throw new GroupCommunicationException(new ArgumentNullException("reduceFunction"));
             }
 
             var receivedData = new List<T>();
@@ -334,7 +341,9 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
                     T[] data = ReceiveFromNode(child);
                     if (data == null || data.Length != 1)
                     {
-                        throw new InvalidOperationException("Received invalid data from child with id: " + child.Identifier);
+                        throw new GroupCommunicationException(
+                            new InvalidOperationException("Received invalid data from child with id: " +
+                                                          child.Identifier));
                     }
 
                     receivedData.Add(data[0]);
@@ -346,7 +355,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         }
 
         /// <summary>
-        /// Adds a special error message in message queue of eavch node
+        /// Adds a special error message in message queue of each node
         /// </summary>
         /// <param name="error">Underlying error</param>
         public void OnError(Exception error)
@@ -398,7 +407,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
                     {
                         if (!_idToNodeMap.ContainsKey(identifier))
                         {
-                            throw new Exception("Trying to get data from the node not present in the node map");
+                            throw new GroupCommunicationException(
+                                new Exception("Trying to get data from the node not present in the node map"));
                         }
 
                         if (_idToNodeMap[identifier].HasMessage())
@@ -427,20 +437,20 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
 
                 return new NodeStruct<T>[] { potentialNode };
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException e)
             {
                 Logger.Log(Level.Error, "No data to read from child");
-                throw;
+                throw new GroupCommunicationException(e);
             }
-            catch (ObjectDisposedException)
+            catch (ObjectDisposedException e)
             {
                 Logger.Log(Level.Error, "No data to read from child");
-                throw;
+                throw new GroupCommunicationException(e);
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException e)
             {
                 Logger.Log(Level.Error, "No data to read from child");
-                throw;
+                throw new GroupCommunicationException(e);
             }
         }
 
@@ -499,7 +509,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             if (count <= 0)
             {
-                throw new ArgumentException("Count must be positive");
+                throw new GroupCommunicationException(new ArgumentException("Count must be positive"));
             }
 
             int i = 0;
@@ -511,7 +521,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
                 int size = (left < count) ? left : count;
                 if (size <= 0)
                 {
-                    throw new ArgumentException("Scatter count must be positive");
+                    throw new GroupCommunicationException(new ArgumentException("Scatter count must be positive"));
                 }
 
                 IList<T> sublist = messages.ToList().GetRange(i, size);
@@ -540,7 +550,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
                 Thread.Sleep(_sleepTime);
             }
 
-            throw new IllegalStateException("Failed to initialize operator topology for node: " + identifier);
+            throw new GroupCommunicationException(
+                new IllegalStateException("Failed to initialize operator topology for node: " + identifier));
         }
     }
 }
