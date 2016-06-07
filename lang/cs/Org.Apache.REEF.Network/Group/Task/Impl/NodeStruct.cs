@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using System.Collections.Concurrent;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
 
@@ -58,8 +59,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
                 return message.Data;
             }
 
-            throw new GroupCommunicationException("Received an error message in Group Communication",
-                message.ErrorMessage.UnderlyingException);
+            Console.WriteLine("Throwing error in node struct");
+            throw message.ErrorMessage.UnderlyingException;
         }
 
         /// <summary>

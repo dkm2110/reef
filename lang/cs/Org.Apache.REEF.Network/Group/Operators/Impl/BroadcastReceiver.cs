@@ -15,7 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System;
 using System.Reactive;
 using System.Collections.Generic;
 using Org.Apache.REEF.Network.Group.Config;
@@ -98,35 +97,23 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// <returns>The incoming message</returns>
         public T Receive()
         {
-            try
+            PipelineMessage<T> message;
+            var messageList = new List<PipelineMessage<T>>();
+
+            do
             {
-                PipelineMessage<T> message;
-                var messageList = new List<PipelineMessage<T>>();
+                message = _topology.ReceiveFromParent();
 
-                do
+                if (_topology.HasChildren())
                 {
-                    message = _topology.ReceiveFromParent();
-
-                    if (_topology.HasChildren())
-                    {
-                        _topology.SendToChildren(message, MessageType.Data);
-                    }
-
-                    messageList.Add(message);
-                } 
-                while (!message.IsLast);
-
-                return PipelineDataConverter.FullMessage(messageList);
-            }
-            catch (Exception e)
-            {
-                var error = e;
-                if (!(e is GroupCommunicationException))
-                {
-                    error = new GroupCommunicationException(e);
+                    _topology.SendToChildren(message, MessageType.Data);
                 }
-                throw error;
+
+                messageList.Add(message);
             }
+            while (!message.IsLast);
+
+            return PipelineDataConverter.FullMessage(messageList);
         }
 
         /// <summary>

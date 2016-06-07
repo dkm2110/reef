@@ -16,36 +16,31 @@
 // under the License.
 
 using System;
+using System.Net;
 
 namespace Org.Apache.REEF.Wake.Remote.Impl
 {
     /// <summary>
-    /// Exception class used to indicate that error occured in StreamingRemoteManager.
+    /// Exception class passed to ObserverContainer with
+    /// the related remote endpoint so that it can call OnError of appropriate container.
     /// </summary>
-    internal sealed class StreamingRemoteManagerException : WakeRemoteException
+    internal sealed class WakeRemoteExceptionWithEndPoint : Exception
     {
         /// <summary>
-        /// Constructor. Simply calls Wake exception constructor
+        /// Constructor.
         /// </summary>
-        /// <param name="message">User error message.</param>
-        /// <param name="innerException">Inner exception that caused the failure.</param>
-        internal StreamingRemoteManagerException(string message, Exception innerException)
-            : base(string.Format("{0}\n{1}", MessageToAppend(), message), innerException)
+        /// <param name="innerException">The inner exception that is the cause of error.</param>
+        /// <param name="remoteEndPoint">The remote end point related to the error.</param>       
+        internal WakeRemoteExceptionWithEndPoint(Exception innerException,
+            IPEndPoint remoteEndPoint)
+            : base("Exception With Endpoint", innerException)
         {
+            RemoteEndPoint = remoteEndPoint;
         }
 
         /// <summary>
-        /// Constructor. Simply calls Wake exception constructor
+        /// Remote end point associated with the exception.
         /// </summary>
-        /// <param name="innerException">Inner exception that caused the failure.</param>
-        internal StreamingRemoteManagerException(Exception innerException) 
-            : base(innerException)
-        {
-        }
-
-        private static string MessageToAppend()
-        {
-            return "Error in Streaming Remote Manager.";
-        }
+        internal IPEndPoint RemoteEndPoint { get; private set; }
     }
 }

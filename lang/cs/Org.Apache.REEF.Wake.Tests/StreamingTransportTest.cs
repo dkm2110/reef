@@ -214,8 +214,16 @@ namespace Org.Apache.REEF.Wake.Tests
                 client.Send("Hello");
                 client.Send(", ");
                 client.Link.Dispose();
-                Action send = () => client.Send("World");
-                Assert.Throws<StreamingTransportLayerException>(send);
+
+                try
+                {
+                    client.Send("World");
+                    Assert.True(false, "Expected an exception on writing to disposed server.");
+                }
+                catch
+                {
+                    // ignored
+                }
 
                 int sleepTimeinMs = 500;
                 int reTries = 100;
@@ -225,9 +233,7 @@ namespace Org.Apache.REEF.Wake.Tests
                     int errorCount = remoteHandler.OnErrorCounter;
                     if (errorCount > 0)
                     {
-                        Assert.True(remoteHandler.ThrownException is StreamingTransportLayerExceptionWithEndPoint);
                         Assert.NotNull(remoteHandler.ThrownException.InnerException);
-                        Assert.True(remoteHandler.ThrownException.InnerException is StreamingLinkException);
                         return;
                     }
                     Thread.Sleep(sleepTimeinMs);
@@ -288,9 +294,7 @@ namespace Org.Apache.REEF.Wake.Tests
                     int errorCount = remoteHandler.OnErrorCounter;
                     if (errorCount > 0)
                     {
-                        Assert.True(remoteHandler.ThrownException is StreamingTransportLayerExceptionWithEndPoint);
                         Assert.NotNull(remoteHandler.ThrownException.InnerException);
-                        Assert.True(remoteHandler.ThrownException.InnerException is StreamingLinkException);
                         return;
                     }
                     Thread.Sleep(sleepTimeinMs);
@@ -349,6 +353,10 @@ namespace Org.Apache.REEF.Wake.Tests
                 if (completedCount > 0)
                 {
                     return;
+                }
+                if (remoteHandler.OnErrorCounter > 0)
+                {
+                    Assert.True(false, "Reached error condition not sure why");
                 }
                 Thread.Sleep(sleepTimeinMs);
             }

@@ -145,13 +145,9 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
                     {
                         sender1.Send(CreateGcmStringType("abc", "id1", "id2"));
                     }
-                    catch (Exception e)
+                    catch (Exception)
                     {
-                        if (e is GroupCommunicationException)
-                        {
-                            return;
-                        }
-                        Assert.True(false, "Exception happended but it is not of type GroupCommunicationException");
+                        return;
                     }
                     Thread.Sleep(sleepTimeInMs);
                 }

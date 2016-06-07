@@ -181,9 +181,9 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
             
             // master is sender 1 parent
             Action receive1 = () => receiver.Reduce();
-            Assert.Throws<GroupCommunicationException>(send1);
-            Assert.Throws<GroupCommunicationException>(send2);
-            Assert.Throws<GroupCommunicationException>(receive1);
+            Assert.Throws<Exception>(send1);
+            Assert.Throws<Exception>(send2);
+            Assert.Throws<Exception>(receive1);
         }
       
         [Fact]
@@ -336,10 +336,10 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
             // 5 and 6 are children of 2
             Action receive3 = () => { receiver5.Receive(); };
             Action receive4 = () => { receiver6.Receive(); };
-            Assert.Throws<GroupCommunicationException>(receive1);
-            Assert.Throws<GroupCommunicationException>(receive2);
-            Assert.Throws<GroupCommunicationException>(receive3);
-            Assert.Throws<GroupCommunicationException>(receive4);
+            Assert.Throws<Exception>(receive1);
+            Assert.Throws<Exception>(receive2);
+            Assert.Throws<Exception>(receive3);
+            Assert.Throws<Exception>(receive4);
 
             int retries = 100;
             int sleepTimeInMs = 500;
@@ -349,13 +349,9 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
                 {
                     sender.Send(1);
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
-                    if (e is GroupCommunicationException)
-                    {
-                        return;
-                    }
-                    Assert.True(false, "Exception happended but it is not of type GroupCommunicationException");
+                    return;
                 }
                 Thread.Sleep(sleepTimeInMs);
             }

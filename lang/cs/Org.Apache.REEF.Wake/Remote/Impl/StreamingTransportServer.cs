@@ -17,7 +17,6 @@
 
 using System;
 using System.Net;
-using System.Net.Configuration;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -43,7 +42,6 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         private readonly IStreamingCodec<T> _streamingCodec;
         private bool _disposed;
         private Task _serverTask;
-        private bool _disposing;
 
         /// <summary>
         /// Constructs a TransportServer to listen for remote events.  
@@ -68,7 +66,6 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             _cancellationSource.Token.ThrowIfCancellationRequested();
             _streamingCodec = streamingCodec;
             _disposed = false;
-            _disposing = false;
         }
 
         /// <summary>
@@ -108,7 +105,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             }
             if (!foundAPort)
             {
-                throw new StreamingTransportLayerException("In server: could not find a port to listen on", exception);
+                Exceptions.Throw(exception, "Could not find a port to listen on", Logger);
             }
             Logger.Log(Level.Info,
                 string.Format("Listening on {0}", _listener.LocalEndpoint.ToString()));
@@ -121,7 +118,6 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (!_disposed)
             {
-                _disposing = true;
                 _cancellationSource.Cancel();
 
                 try
@@ -189,8 +185,10 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             // Keep reading messages from client until they disconnect or timeout
             CancellationToken token = _cancellationSource.Token;
             var stream = client.GetStream();
+            bool disposing = false;
             token.Register(() =>
             {
+                disposing = true;
                 stream.Close();
             });
 
@@ -206,14 +204,14 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
 
                         if (message == null)
                         {
-                            if (_disposing)
+                            if (disposing)
                             {
                                 _remoteObserver.OnCompleted();
                             }
                             else
                             {
                                 _remoteObserver.OnError(
-                                    new StreamingTransportLayerExceptionWithEndPoint(
+                                    new WakeRemoteExceptionWithEndPoint(
                                         new Exception("Message received in StreamingTransportServer is null"),
                                         remoteEndPoint));
                             }
@@ -225,21 +223,14 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                     }
                     catch (Exception e)
                     {
-                        if (_disposing)
+                        Logger.Log(Level.Info, "In server error receioved: " + e.ToString());
+                        if (disposing)
                         {
                             _remoteObserver.OnCompleted();
                         }
                         else
                         {
-                            if (!(e is WakeRemoteException))
-                            {
-                                Logger.Log(Level.Info,
-                                    "Exception should have been of type WakeRemoteException. Wrapping it with WakeRemoteException.");
-                            }
-                            _remoteObserver.OnError(new StreamingTransportLayerExceptionWithEndPoint(
-                                "Error in server.",
-                                e,
-                                remoteEndPoint));
+                            _remoteObserver.OnError(new WakeRemoteExceptionWithEndPoint(e, remoteEndPoint));
                         }
                         break;
                     }

@@ -18,7 +18,6 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
-using Org.Apache.REEF.Utilities.Logging;
 using Org.Apache.REEF.Wake.StreamingCodec;
 
 namespace Org.Apache.REEF.Wake.Remote.Impl
@@ -29,8 +28,6 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
     /// <typeparam name="T">Message type T.</typeparam>
     internal sealed class StreamingRemoteManager<T> : IRemoteManager<T>
     {
-        private static readonly Logger Logger = Logger.GetLogger(typeof(StreamingRemoteManager<T>));
-
         private readonly ObserverContainer<T> _observerContainer;
         private readonly StreamingTransportServer<IRemoteEvent<T>> _server;
         private readonly Dictionary<IPEndPoint, ProxyObserver> _cachedClients;
@@ -52,7 +49,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (localAddress == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("localAddress"));
+                throw new ArgumentNullException("localAddress");
             }
 
             _tcpClientFactory = tcpClientFactory;
@@ -65,14 +62,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                 _observerContainer,
                 tcpPortProvider,
                 _remoteEventCodec);
-            try
-            {
-                _server.Run();
-            }
-            catch (Exception e)
-            {
-                throw new StreamingRemoteManagerException(e);
-            }
+            _server.Run();
 
             LocalEndpoint = _server.LocalEndpoint;
             Identifier = new SocketRemoteIdentifier(LocalEndpoint);
@@ -98,13 +88,13 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (remoteEndpoint == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("remoteEndpoint"));
+                throw new ArgumentNullException("remoteEndpoint");
             }
 
             SocketRemoteIdentifier id = remoteEndpoint.Id as SocketRemoteIdentifier;
             if (id == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentException("ID not supported"));
+                throw new ArgumentException("ID not supported");
             }
 
             return GetRemoteObserver(id.Addr);
@@ -120,7 +110,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (remoteEndpoint == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("remoteEndpoint"));
+                throw new ArgumentNullException("remoteEndpoint");
             }
 
             ProxyObserver remoteObserver;
@@ -143,13 +133,13 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (remoteEndpoint == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("remoteEndpoint"));
+                throw new ArgumentNullException("remoteEndpoint");
             }
 
             SocketRemoteIdentifier id = remoteEndpoint.Id as SocketRemoteIdentifier;
             if (id == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentException("ID not supported"));
+                throw new ArgumentException("ID not supported");
             }
 
             return GetUnmanagedObserver(id.Addr);
@@ -165,7 +155,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (remoteEndpoint == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("remoteEndpoint"));
+                throw new ArgumentNullException("remoteEndpoint");
             }
 
             ProxyObserver remoteObserver = CreateRemoteObserver(remoteEndpoint);
@@ -174,21 +164,14 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
 
         private ProxyObserver CreateRemoteObserver(IPEndPoint remoteEndpoint)
         {
-            try
-            {
-                StreamingTransportClient<IRemoteEvent<T>> client =
-                    new StreamingTransportClient<IRemoteEvent<T>>(remoteEndpoint,
-                        _observerContainer,
-                        _remoteEventCodec,
-                        _tcpClientFactory);
+            StreamingTransportClient<IRemoteEvent<T>> client =
+                new StreamingTransportClient<IRemoteEvent<T>>(remoteEndpoint,
+                    _observerContainer,
+                    _remoteEventCodec,
+                    _tcpClientFactory);
 
-                ProxyObserver remoteObserver = new ProxyObserver(client);
-                return remoteObserver;
-            }
-            catch (Exception e)
-            {
-                throw new StreamingRemoteManagerException(e);
-            }
+            ProxyObserver remoteObserver = new ProxyObserver(client);
+            return remoteObserver;
         }
 
         /// <summary>
@@ -203,18 +186,18 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (remoteEndpoint == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("remoteEndpoint"));
+                throw new ArgumentNullException("remoteEndpoint");
             }
 
             if (observer == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("observer"));
+                throw new ArgumentNullException("observer");
             }
 
             SocketRemoteIdentifier id = remoteEndpoint.Id as SocketRemoteIdentifier;
             if (id == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentException("ID not supported"));
+                throw new ArgumentException("ID not supported");
             }
 
             return RegisterObserver(id.Addr, observer);
@@ -232,11 +215,11 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (remoteEndpoint == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("remoteEndpoint"));
+                throw new ArgumentNullException("remoteEndpoint");
             }
             if (observer == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("observer"));
+                throw new ArgumentNullException("observer");
             }
 
             return _observerContainer.RegisterObserver(remoteEndpoint, observer);
@@ -253,7 +236,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (observer == null)
             {
-                throw new StreamingRemoteManagerException(new ArgumentNullException("observer"));
+                throw new ArgumentNullException("observer");
             }
 
             return _observerContainer.RegisterObserver(observer);
@@ -298,29 +281,11 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             /// <param name="message">The message to send</param>
             public void OnNext(T message)
             {
-                if (message == null)
-                {
-                    throw new StreamingRemoteManagerException("In ProxyObserver: Trying to send null message",
-                        new ArgumentNullException("message"));
-                }
-
                 IRemoteEvent<T> remoteEvent = new RemoteEvent<T>(_client.Link.LocalEndpoint,
                     _client.Link.RemoteEndpoint,
                     message);
 
-                try
-                {
-                    _client.Send(remoteEvent);
-                }
-                catch (Exception e)
-                {
-                    if (!(e is StreamingTransportLayerException))
-                    {
-                        Logger.Log(Level.Info,
-                            "Exception should have been of type StreamingTransportLayerException. Wrapping it with StreamingTransportLayerException.");
-                    }
-                    throw new StreamingRemoteManagerException(e);
-                }
+                _client.Send(remoteEvent);
             }
 
             /// <summary>

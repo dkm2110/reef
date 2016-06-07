@@ -303,7 +303,7 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
                     int errorCount = observer.OnErrorCounter;
                     if (errorCount > 0)
                     {
-                        Assert.True(observer.ThrownException is WakeRemoteException);                      
+                        Assert.NotNull(observer.ThrownException);                      
                         return;
                     }
                     Thread.Sleep(sleepTimeinMs);
@@ -371,8 +371,16 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
                 Assert.Equal("def", queue.Take());
                 Assert.Equal("ghi", queue.Take());
                 networkService2.Dispose();
-                Action send = () => connection.Write("jkl");
-                Assert.Throws<StreamingNetworkServiceException>(send);
+
+                try
+                {
+                    connection.Write("jkl"); 
+                    Assert.True(false, "Expected an exception on writing to disposed service.");
+                }
+                catch
+                {
+                    // ignored
+                }
             }
         }
 

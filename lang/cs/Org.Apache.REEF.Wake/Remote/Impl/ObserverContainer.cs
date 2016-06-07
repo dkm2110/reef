@@ -48,7 +48,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// <param name="remoteEndpoint">The IPEndPoint of the remote host</param>
         /// <param name="observer">The IObserver to handle incoming messages</param>
         /// <returns>An IDisposable used to unregister the observer with</returns>
-        public IDisposable RegisterObserver(IPEndPoint remoteEndpoint, IObserver<T> observer) 
+        public IDisposable RegisterObserver(IPEndPoint remoteEndpoint, IObserver<T> observer)
         {
             if (remoteEndpoint.Address.Equals(IPAddress.Any))
             {
@@ -96,7 +96,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                 // IObserver was registered by IPEndpoint
                 observer1.OnNext(value);
                 handled = true;
-            } 
+            }
             else if (_typeMap.TryGetValue(value.GetType(), out observer2))
             {
                 // IObserver was registered by event type
@@ -106,15 +106,9 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                 handled = true;
             }
 
-            // The exceptions being thrown in OnNext are indicative of bugs in REEF 
-            // or wrong user code like codecs. It is not a good practice to expect 
-            // to handle exceptions in OnNext calls.
-            // https://msdn.microsoft.com/en-us/library/ff519622(v=vs.110).aspx
-            // So there is no need to propagate these exceptions to the upstream observers 
-            // or downstream callers.
             if (!handled)
             {
-                throw new WakeRemoteException("Unrecognized Wake RemoteEvent message");
+                throw new WakeRuntimeException("Unrecognized Wake RemoteEvent message");
             }
         }
 
@@ -129,7 +123,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// <param name="error">The exception type.</param>
         public void OnError(Exception error)
         {
-            var exceptionWithEndPoint = error as StreamingTransportLayerExceptionWithEndPoint;
+            var exceptionWithEndPoint = error as WakeRemoteExceptionWithEndPoint;
             if (exceptionWithEndPoint != null)
             {
                 var remoteEndPoint = exceptionWithEndPoint.RemoteEndPoint;
@@ -137,13 +131,13 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
 
                 if (_universalObserver != null)
                 {
-                    _universalObserver.OnError(exceptionWithEndPoint);
+                    _universalObserver.OnError(exceptionWithEndPoint.InnerException);
                 }
 
                 if (_endpointMap.TryGetValue(remoteEndPoint, out observer1))
                 {
                     // IObserver was registered by IPEndpoint
-                    observer1.OnError(error);
+                    observer1.OnError(exceptionWithEndPoint.InnerException);
                 }
             }
         }

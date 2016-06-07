@@ -99,28 +99,16 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// <param name="data">The data to send.</param>
         public void Send(T data)
         {
-            try
+            var messageList = PipelineDataConverter.PipelineMessage(data);
+
+            if (data == null)
             {
-                var messageList = PipelineDataConverter.PipelineMessage(data);
-
-                if (data == null)
-                {
-                    throw new ArgumentNullException("data");
-                }
-
-                foreach (var message in messageList)
-                {
-                    _topology.SendToChildren(message, MessageType.Data);
-                }
+                throw new ArgumentNullException("data");
             }
-            catch (Exception e)
+
+            foreach (var message in messageList)
             {
-                var error = e;
-                if (!(e is GroupCommunicationException))
-                {
-                    error = new GroupCommunicationException(e);
-                }
-                throw error;
+                _topology.SendToChildren(message, MessageType.Data);
             }
         }
 
@@ -133,6 +121,6 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             {
                 _topology.Initialize();
             }
-        }      
+        }
     }
 }

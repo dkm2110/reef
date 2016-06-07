@@ -63,17 +63,9 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             }
 
             IIdentifier destId = _idFactory.Create(message.Destination);
-
-            try
-            {
-                var conn = _networkService.NewConnection(destId);
-                conn.Open();
-                conn.Write(message);
-            }
-            catch (Exception e)
-            {
-                throw new GroupCommunicationException(e);
-            }
+            var conn = _networkService.NewConnection(destId);
+            conn.Open();
+            conn.Write(message);
         }
     }
 }

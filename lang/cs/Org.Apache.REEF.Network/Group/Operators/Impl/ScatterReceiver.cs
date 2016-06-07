@@ -15,7 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive;
@@ -54,7 +53,7 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             [Parameter(typeof(GroupCommConfigurationOptions.OperatorName))] string operatorName,
             [Parameter(typeof(GroupCommConfigurationOptions.CommunicationGroupName))] string groupName,
             [Parameter(typeof(GroupCommConfigurationOptions.Initialize))] bool initialize,
-            OperatorTopology<T> topology, 
+            OperatorTopology<T> topology,
             ICommunicationGroupNetworkObserver networkHandler)
         {
             OperatorName = operatorName;
@@ -62,8 +61,9 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             Version = DefaultVersion;
             _topology = topology;
             _initialize = initialize;
+
             var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(topology.OnNext,
-                topology.OnError);
+              topology.OnError);
             networkHandler.Register(operatorName, msgHandler);
         }
 
@@ -93,21 +93,9 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// <returns>The sublist of messages</returns>
         public List<T> Receive()
         {
-            try
-            {
-                IList<T> elements = _topology.ReceiveListFromParent();
-                _topology.ScatterToChildren(elements, MessageType.Data);
-                return elements.ToList();
-            }
-            catch (Exception e)
-            {
-                var error = e;
-                if (!(e is GroupCommunicationException))
-                {
-                    error = new GroupCommunicationException(e);
-                }
-                throw error;
-            }
+            IList<T> elements = _topology.ReceiveListFromParent();
+            _topology.ScatterToChildren(elements, MessageType.Data);
+            return elements.ToList();
         }
 
         /// <summary>

@@ -32,12 +32,12 @@ namespace Org.Apache.REEF.Network.Group.Driver.Impl
         /// <param name="exception">Underlying exception that caused the error.</param>
         internal GroupCommunicationErrorMessage(Exception exception)
         {
-            UnderlyingException = exception as GroupCommunicationException ?? new GroupCommunicationException(exception);
+            UnderlyingException = exception;
         }
 
         /// <summary>
-        /// Underlying group communication exception.
+        /// Underlying exception.
         /// </summary>
-        internal GroupCommunicationException UnderlyingException { get; private set; }
+        internal Exception UnderlyingException { get; private set; }
     }
 }

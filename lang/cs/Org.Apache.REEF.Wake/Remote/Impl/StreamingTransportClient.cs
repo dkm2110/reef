@@ -49,11 +49,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             IStreamingCodec<T> streamingCodec,
             ITcpClientConnectionFactory clientFactory)
         {
-            if (remoteEndpoint == null)
-            {
-                throw new StreamingTransportLayerException("In client: Endpoint is null",
-                    new ArgumentNullException("remoteEndpoint"));
-            }
+            Exceptions.ThrowIfArgumentNull(remoteEndpoint, "remoteEndpoint", Logger);
 
             _link = new StreamingLink<T>(remoteEndpoint, streamingCodec, clientFactory);
             _remoteEndPoint = _link.RemoteEndpoint;
@@ -95,23 +91,10 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             if (message == null)
             {
-                throw new StreamingTransportLayerException("In client: message to be sent is null",
-                    new ArgumentNullException("message"));
+                throw new ArgumentNullException("message");
             }
 
-            try
-            {
-                _link.Write(message);
-            }
-            catch (Exception e)
-            {
-                if (!(e is WakeRemoteException))
-                {
-                    Logger.Log(Level.Info,
-                    "Exception should have been of type WakeRemoteException. Wrapping it with WakeRemoteException.");
-                }
-                throw new StreamingTransportLayerException("Error in client.", e);                
-            }
+            _link.Write(message);
         }
 
         /// <summary>
@@ -146,7 +129,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                         else
                         {
                             _observer.OnError(
-                                new StreamingTransportLayerExceptionWithEndPoint(
+                                new WakeRemoteExceptionWithEndPoint(
                                     new Exception("Message received in StreamingTransportClient is null"),
                                     _remoteEndPoint));
                         }
@@ -164,14 +147,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                     }
                     else
                     {
-                        if (!(e is WakeRemoteException))
-                        {
-                            Logger.Log(Level.Info,
-                                "Exception should have been of type WakeRemoteException. Wrapping it with WakeRemoteException.");
-                        }
-                        _observer.OnError(new StreamingTransportLayerExceptionWithEndPoint("Error in client.",
-                            e,
-                            _remoteEndPoint));
+                        _observer.OnError(new WakeRemoteExceptionWithEndPoint(e, _remoteEndPoint));
                     }
                     break;
                 }

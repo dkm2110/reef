@@ -15,7 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System;
 using System.Reactive;
 using System.Collections.Generic;
 using Org.Apache.REEF.Network.Group.Config;
@@ -111,29 +110,17 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
         /// <returns>The single aggregated data</returns>
         public T Reduce()
         {
-            try
-            {
-                PipelineMessage<T> message;
-                var messageList = new List<PipelineMessage<T>>();
+            PipelineMessage<T> message;
+            var messageList = new List<PipelineMessage<T>>();
 
-                do
-                {
-                    message = _topology.ReceiveFromChildren(_pipelinedReduceFunc);
-                    messageList.Add(message);
-                } 
-                while (!message.IsLast);
-
-                return PipelineDataConverter.FullMessage(messageList);
-            }
-            catch (Exception e)
+            do
             {
-                var error = e;
-                if (!(e is GroupCommunicationException))
-                {
-                    error = new GroupCommunicationException(e);
-                }
-                throw error;
+                message = _topology.ReceiveFromChildren(_pipelinedReduceFunc);
+                messageList.Add(message);
             }
+            while (!message.IsLast);
+
+            return PipelineDataConverter.FullMessage(messageList);
         }
 
         /// <summary>
