@@ -15,17 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Org.Apache.REEF.Common.Tasks;
+using Org.Apache.REEF.Common.Tasks.Events;
 using Org.Apache.REEF.Network.Group.Operators;
 using Org.Apache.REEF.Network.Group.Task;
 using Org.Apache.REEF.Tang.Annotations;
+using Org.Apache.REEF.Utilities;
 using Org.Apache.REEF.Utilities.Logging;
 
 namespace Org.Apache.REEF.Network.Examples.GroupCommunication.BroadcastReduceDriverAndTasks
 {
-    public class SlaveTask : ITask
+    public class SlaveTask : ITask, IObserver<ICloseEvent>, ITaskMessageSource
     {
         private static readonly Logger Logger = Logger.GetLogger(typeof(SlaveTask));
 
@@ -34,6 +38,9 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.BroadcastReduceDri
         private readonly ICommunicationGroupClient _commGroup;
         private readonly IBroadcastReceiver<int> _broadcastReceiver;
         private readonly IReduceSender<int> _triangleNumberSender;
+        private readonly ManualResetEventSlim _waitToCloseEvent = new ManualResetEventSlim(false);
+        private int _disposed = 0;
+        private int _doneMessage = 0;
 
         [Inject]
         public SlaveTask(
@@ -81,12 +88,53 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.BroadcastReduceDri
                 }
             }
 
+            _doneMessage = 1;
+            _waitToCloseEvent.Wait();
             return null;
         }
 
         public void Dispose()
         {
-            _groupCommClient.Dispose();
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                _groupCommClient.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Signals the task to exit
+        /// </summary>
+        /// <param name="value">Close event. Does not matter in this case.</param>
+        public void OnNext(ICloseEvent value)
+        {
+            _waitToCloseEvent.Set();
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnCompleted()
+        {
+        }
+
+        /// <summary>
+        /// Message to be sent to driver. Sends done signal once task is 
+        /// ready to exit.
+        /// </summary>
+        public Optional<TaskMessage> Message
+        {
+            get
+            {
+                int done = _doneMessage;
+                TaskMessage message = TaskMessage.From(
+                    "slave",
+                    BitConverter.GetBytes(done));
+                return Optional<TaskMessage>.Of(message);
+            }
+            set
+            {
+            }
         }
 
         private int TriangleNumber(int n)

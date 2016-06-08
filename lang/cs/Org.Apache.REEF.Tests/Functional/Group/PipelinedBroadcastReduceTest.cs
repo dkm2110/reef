@@ -64,7 +64,8 @@ namespace Org.Apache.REEF.Tests.Functional.Group
                 DriverConfiguration.ConfigurationModule
                     .Set(DriverConfiguration.OnDriverStarted, GenericType<PipelinedBroadcastReduceDriver>.Class)
                     .Set(DriverConfiguration.OnEvaluatorAllocated, GenericType<PipelinedBroadcastReduceDriver>.Class)
-                    .Set(DriverConfiguration.OnEvaluatorFailed, GenericType<PipelinedBroadcastReduceDriver>.Class)
+                    .Set(DriverConfiguration.OnTaskRunning, GenericType<PipelinedBroadcastReduceDriver>.Class)
+                    .Set(DriverConfiguration.OnTaskMessage, GenericType<PipelinedBroadcastReduceDriver>.Class)
                     .Set(DriverConfiguration.OnContextActive, GenericType<PipelinedBroadcastReduceDriver>.Class)
                     .Set(DriverConfiguration.CustomTraceLevel, Level.Info.ToString())
                     .Build())

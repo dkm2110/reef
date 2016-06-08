@@ -77,15 +77,10 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
             }
         }
 
-        private List<string> GetScatterOrder()
-        {
-            return new List<string> { "SlaveTask-4", "SlaveTask-3", "SlaveTask-2", "SlaveTask-1" };
-        }
-
         /// <summary>
         /// Signals the task to exit
         /// </summary>
-        /// <param name="value">close event. Does not matter in this case.</param>
+        /// <param name="value">Close event. Does not matter in this case.</param>
         public void OnNext(ICloseEvent value)
         {
             _waitToCloseEvent.Set();
@@ -99,6 +94,10 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
         {
         }
 
+        /// <summary>
+        /// Message to be sent to driver. Sends done signal once task is 
+        /// ready to exit.
+        /// </summary>
         public Optional<TaskMessage> Message 
         {
             get
