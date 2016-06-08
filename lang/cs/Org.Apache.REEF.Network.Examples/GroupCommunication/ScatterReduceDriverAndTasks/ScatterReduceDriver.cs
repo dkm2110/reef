@@ -16,15 +16,18 @@
 // under the License.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using Org.Apache.REEF.Common.Io;
 using Org.Apache.REEF.Common.Tasks;
 using Org.Apache.REEF.Driver;
 using Org.Apache.REEF.Driver.Bridge;
 using Org.Apache.REEF.Driver.Context;
 using Org.Apache.REEF.Driver.Evaluator;
+using Org.Apache.REEF.Driver.Task;
 using Org.Apache.REEF.Network.Examples.GroupCommunication.BroadcastReduceDriverAndTasks;
 using Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastReduceDriverAndTasks;
 using Org.Apache.REEF.Network.Group.Config;
@@ -48,8 +51,9 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
     public class ScatterReduceDriver : 
         IObserver<IAllocatedEvaluator>, 
         IObserver<IActiveContext>, 
-        IObserver<IFailedEvaluator>, 
-        IObserver<IDriverStarted>
+        IObserver<IDriverStarted>,
+        IObserver<ITaskMessage>,
+        IObserver<IRunningTask>
     {
         private static readonly Logger LOGGER = Logger.GetLogger(typeof(ScatterReduceDriver));
 
@@ -60,6 +64,9 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
         private readonly TaskStarter _groupCommTaskStarter;
         private readonly IConfiguration _codecConfig;
         private readonly IEvaluatorRequestor _evaluatorRequestor;
+        private const string ClosingMessage = "please close";
+        private readonly ConcurrentBag<IRunningTask> _runningTasks;
+        private readonly ConcurrentBag<string> _doneTaskIds;
 
         [Inject]
         public ScatterReduceDriver(
@@ -70,6 +77,8 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
             _numEvaluators = numEvaluators;
             _groupCommDriver = groupCommDriver;
             _evaluatorRequestor = evaluatorRequestor;
+            _runningTasks = new ConcurrentBag<IRunningTask>();
+            _doneTaskIds = new ConcurrentBag<string>();
 
             _codecConfig = StreamingCodecConfiguration<int>.Conf
                .Set(StreamingCodecConfiguration<int>.Codec, GenericType<IntStreamingCodec>.Class)
@@ -117,6 +126,8 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
                 IConfiguration partialTaskConf = TaskConfiguration.ConfigurationModule
                     .Set(TaskConfiguration.Identifier, GroupTestConstants.MasterTaskId)
                     .Set(TaskConfiguration.Task, GenericType<MasterTask>.Class)
+                    .Set(TaskConfiguration.OnClose, GenericType<MasterTask>.Class)
+                    .Set(TaskConfiguration.OnSendMessage, GenericType<MasterTask>.Class)
                     .Build();
 
                 _commGroup.AddTask(GroupTestConstants.MasterTaskId);
@@ -131,6 +142,8 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
                 IConfiguration partialTaskConf = TaskConfiguration.ConfigurationModule
                     .Set(TaskConfiguration.Identifier, slaveTaskId)
                     .Set(TaskConfiguration.Task, GenericType<SlaveTask>.Class)
+                    .Set(TaskConfiguration.OnClose, GenericType<SlaveTask>.Class)
+                    .Set(TaskConfiguration.OnSendMessage, GenericType<SlaveTask>.Class)
                     .Build();
 
                 _commGroup.AddTask(slaveTaskId);
@@ -138,8 +151,9 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
             }
         }
 
-        public void OnNext(IFailedEvaluator value)
+        public void OnNext(IRunningTask runningTask)
         {
+            _runningTasks.Add(runningTask);
         }
 
         public void OnNext(IDriverStarted value)
@@ -152,6 +166,22 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
                     .SetRackName("WonderlandRack")
                     .SetEvaluatorBatchId("BroadcastEvaluator").Build();   
             _evaluatorRequestor.Submit(request);
+        }
+
+        public void OnNext(ITaskMessage value)
+        {
+            int done = BitConverter.ToInt32(value.Message, 0);
+            if (!_doneTaskIds.Contains(value.TaskId) && done == 1)
+            {
+                _doneTaskIds.Add(value.TaskId);
+                if (_doneTaskIds.Count == _numEvaluators)
+                {
+                    foreach (var runningTask in _runningTasks)
+                    {
+                        runningTask.Dispose(Encoding.UTF8.GetBytes(ClosingMessage));
+                    }
+                }
+            }
         }
 
         public void OnError(Exception error)
