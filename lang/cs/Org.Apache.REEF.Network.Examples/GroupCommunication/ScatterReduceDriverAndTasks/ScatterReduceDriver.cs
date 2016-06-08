@@ -16,31 +16,25 @@
 // under the License.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
-using Org.Apache.REEF.Common.Io;
+using System.Text;
 using Org.Apache.REEF.Common.Tasks;
 using Org.Apache.REEF.Driver;
-using Org.Apache.REEF.Driver.Bridge;
 using Org.Apache.REEF.Driver.Context;
 using Org.Apache.REEF.Driver.Evaluator;
-using Org.Apache.REEF.Network.Examples.GroupCommunication.BroadcastReduceDriverAndTasks;
-using Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastReduceDriverAndTasks;
+using Org.Apache.REEF.Driver.Task;
 using Org.Apache.REEF.Network.Group.Config;
 using Org.Apache.REEF.Network.Group.Driver;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
 using Org.Apache.REEF.Network.Group.Operators;
 using Org.Apache.REEF.Network.Group.Pipelining.Impl;
 using Org.Apache.REEF.Network.Group.Topology;
-using Org.Apache.REEF.Network.NetworkService;
 using Org.Apache.REEF.Tang.Annotations;
 using Org.Apache.REEF.Tang.Implementations.Configuration;
-using Org.Apache.REEF.Tang.Implementations.Tang;
 using Org.Apache.REEF.Tang.Interface;
 using Org.Apache.REEF.Tang.Util;
-using Org.Apache.REEF.Utilities.Logging;
-using Org.Apache.REEF.Wake.Remote.Impl;
 using Org.Apache.REEF.Wake.StreamingCodec.CommonStreamingCodecs;
 
 namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDriverAndTasks
@@ -48,11 +42,10 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
     public class ScatterReduceDriver : 
         IObserver<IAllocatedEvaluator>, 
         IObserver<IActiveContext>, 
-        IObserver<IFailedEvaluator>, 
-        IObserver<IDriverStarted>
+        IObserver<IDriverStarted>,
+        IObserver<ITaskMessage>,
+        IObserver<IRunningTask>
     {
-        private static readonly Logger LOGGER = Logger.GetLogger(typeof(ScatterReduceDriver));
-
         private readonly int _numEvaluators;
 
         private readonly IGroupCommDriver _groupCommDriver;
@@ -60,9 +53,13 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
         private readonly TaskStarter _groupCommTaskStarter;
         private readonly IConfiguration _codecConfig;
         private readonly IEvaluatorRequestor _evaluatorRequestor;
+        private const string ClosingMessage = "please close";
+        private readonly ConcurrentBag<IRunningTask> _runningTasks = new ConcurrentBag<IRunningTask>();
+        private readonly ISet<string> _doneTaskIds = new HashSet<string>();
+        private readonly object _lockForDoneTasks = new object();
 
         [Inject]
-        public ScatterReduceDriver(
+        private ScatterReduceDriver(
             [Parameter(typeof(GroupTestConfig.NumEvaluators))] int numEvaluators,
             GroupCommDriver groupCommDriver,
             IEvaluatorRequestor evaluatorRequestor)
@@ -101,6 +98,10 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
             _groupCommTaskStarter = new TaskStarter(_groupCommDriver, numEvaluators);
         }
 
+        /// <summary>
+        /// Submits Group communication configuration as part of service
+        /// </summary>
+        /// <param name="allocatedEvaluator">Allocated evaluator</param>
         public void OnNext(IAllocatedEvaluator allocatedEvaluator)
         {
             IConfiguration contextConf = _groupCommDriver.GetContextConfiguration();
@@ -109,6 +110,10 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
             allocatedEvaluator.SubmitContextAndService(contextConf, serviceConf);
         }
 
+        /// <summary>
+        /// Submits master or slave task.
+        /// </summary>
+        /// <param name="activeContext">Active context to which task is submitted.</param>
         public void OnNext(IActiveContext activeContext)
         {
             if (_groupCommDriver.IsMasterTaskContext(activeContext))
@@ -117,6 +122,8 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
                 IConfiguration partialTaskConf = TaskConfiguration.ConfigurationModule
                     .Set(TaskConfiguration.Identifier, GroupTestConstants.MasterTaskId)
                     .Set(TaskConfiguration.Task, GenericType<MasterTask>.Class)
+                    .Set(TaskConfiguration.OnClose, GenericType<MasterTask>.Class)
+                    .Set(TaskConfiguration.OnSendMessage, GenericType<MasterTask>.Class)
                     .Build();
 
                 _commGroup.AddTask(GroupTestConstants.MasterTaskId);
@@ -131,6 +138,8 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
                 IConfiguration partialTaskConf = TaskConfiguration.ConfigurationModule
                     .Set(TaskConfiguration.Identifier, slaveTaskId)
                     .Set(TaskConfiguration.Task, GenericType<SlaveTask>.Class)
+                    .Set(TaskConfiguration.OnClose, GenericType<SlaveTask>.Class)
+                    .Set(TaskConfiguration.OnSendMessage, GenericType<SlaveTask>.Class)
                     .Build();
 
                 _commGroup.AddTask(slaveTaskId);
@@ -138,10 +147,18 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
             }
         }
 
-        public void OnNext(IFailedEvaluator value)
+        /// <summary>
+        /// Adds running task to the list. This is needed later on to send the stop message.
+        /// </summary>
+        /// <param name="runningTask">Running task.</param>
+        public void OnNext(IRunningTask runningTask)
         {
+            _runningTasks.Add(runningTask);
         }
 
+        /// <summary>
+        /// Requests evaluators once driver starts
+        /// </summary>
         public void OnNext(IDriverStarted value)
         {
             IEvaluatorRequest request =
@@ -152,6 +169,32 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
                     .SetRackName("WonderlandRack")
                     .SetEvaluatorBatchId("BroadcastEvaluator").Build();   
             _evaluatorRequestor.Submit(request);
+        }
+
+        /// <summary>
+        /// Specifies what to do when the message is received from task.
+        /// If we receive message from task that it is done (done = 1), and 
+        /// we got these messages from all the evaluators we send close signal to 
+        /// all the tasks.
+        /// </summary>
+        /// <param name="value"></param>
+        public void OnNext(ITaskMessage value)
+        {
+            lock (_lockForDoneTasks)
+            {
+                int done = BitConverter.ToInt32(value.Message, 0);
+                if (!_doneTaskIds.Contains(value.TaskId) && done == 1)
+                {
+                    _doneTaskIds.Add(value.TaskId);
+                    if (_doneTaskIds.Count == _numEvaluators)
+                    {
+                        foreach (var runningTask in _runningTasks)
+                        {
+                            runningTask.Dispose(Encoding.UTF8.GetBytes(ClosingMessage));
+                        }
+                    }
+                }
+            }
         }
 
         public void OnError(Exception error)

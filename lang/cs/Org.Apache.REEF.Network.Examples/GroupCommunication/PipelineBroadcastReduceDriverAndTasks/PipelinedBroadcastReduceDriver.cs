@@ -16,23 +16,22 @@
 // under the License.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Org.Apache.REEF.Common.Io;
+using System.Text;
 using Org.Apache.REEF.Common.Tasks;
 using Org.Apache.REEF.Driver;
-using Org.Apache.REEF.Driver.Bridge;
 using Org.Apache.REEF.Driver.Context;
 using Org.Apache.REEF.Driver.Evaluator;
-using Org.Apache.REEF.Network.Examples.GroupCommunication.BroadcastReduceDriverAndTasks;
+using Org.Apache.REEF.Driver.Task;
 using Org.Apache.REEF.Network.Group.Config;
 using Org.Apache.REEF.Network.Group.Driver;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
 using Org.Apache.REEF.Network.Group.Operators;
 using Org.Apache.REEF.Network.Group.Pipelining;
 using Org.Apache.REEF.Network.Group.Topology;
-using Org.Apache.REEF.Network.NetworkService;
 using Org.Apache.REEF.Tang.Annotations;
 using Org.Apache.REEF.Tang.Implementations.Configuration;
 using Org.Apache.REEF.Tang.Implementations.Tang;
@@ -48,8 +47,9 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastR
     public class PipelinedBroadcastReduceDriver : 
         IObserver<IAllocatedEvaluator>, 
         IObserver<IActiveContext>, 
-        IObserver<IFailedEvaluator>, 
-        IObserver<IDriverStarted>
+        IObserver<IDriverStarted>,
+        IObserver<ITaskMessage>,
+        IObserver<IRunningTask>
     {
         private static readonly Logger Logger = Logger.GetLogger(typeof(PipelinedBroadcastReduceDriver));
         private readonly int _arraySize;
@@ -61,6 +61,10 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastR
         private readonly IConfiguration _tcpPortProviderConfig;
         private readonly IConfiguration _codecConfig;
         private readonly IEvaluatorRequestor _evaluatorRequestor;
+        private readonly ConcurrentBag<IRunningTask> _runningTasks = new ConcurrentBag<IRunningTask>();
+        private readonly ISet<string> _doneTaskIds = new HashSet<string>();
+        private readonly object _lockForDoneTasks = new object(); 
+        private const string ClosingMessage = "please close";
 
         [Inject]
         public PipelinedBroadcastReduceDriver(
@@ -124,6 +128,10 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastR
             _groupCommTaskStarter = new TaskStarter(_groupCommDriver, numEvaluators);
         }
 
+        /// <summary>
+        /// Submits Group communication configuration as part of service
+        /// </summary>
+        /// <param name="allocatedEvaluator">Allocated evaluator</param>
         public void OnNext(IAllocatedEvaluator allocatedEvaluator)
         {
             IConfiguration contextConf = _groupCommDriver.GetContextConfiguration();
@@ -131,6 +139,11 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastR
             serviceConf = Configurations.Merge(serviceConf, _codecConfig, _tcpPortProviderConfig);
             allocatedEvaluator.SubmitContextAndService(contextConf, serviceConf);
         }
+
+        /// <summary>
+        /// Submits master or slave task.
+        /// </summary>
+        /// <param name="activeContext">Active context to which task is submitted.</param>
         public void OnNext(IActiveContext activeContext)
         {
             if (_groupCommDriver.IsMasterTaskContext(activeContext))
@@ -142,6 +155,8 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastR
                     TaskConfiguration.ConfigurationModule
                         .Set(TaskConfiguration.Identifier, GroupTestConstants.MasterTaskId)
                         .Set(TaskConfiguration.Task, GenericType<PipelinedMasterTask>.Class)
+                        .Set(TaskConfiguration.OnClose, GenericType<PipelinedMasterTask>.Class)
+                        .Set(TaskConfiguration.OnSendMessage, GenericType<PipelinedMasterTask>.Class)
                         .Build())
                     .BindNamedParameter<GroupTestConfig.NumEvaluators, int>(
                         GenericType<GroupTestConfig.NumEvaluators>.Class,
@@ -165,6 +180,8 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastR
                     TaskConfiguration.ConfigurationModule
                         .Set(TaskConfiguration.Identifier, slaveTaskId)
                         .Set(TaskConfiguration.Task, GenericType<PipelinedSlaveTask>.Class)
+                        .Set(TaskConfiguration.OnClose, GenericType<PipelinedSlaveTask>.Class)
+                        .Set(TaskConfiguration.OnSendMessage, GenericType<PipelinedSlaveTask>.Class)
                         .Build())
                     .BindNamedParameter<GroupTestConfig.NumEvaluators, int>(
                         GenericType<GroupTestConfig.NumEvaluators>.Class,
@@ -187,14 +204,48 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.PipelineBroadcastR
             throw error;
         }
 
+        /// <summary>
+        /// Adds running task to the list. This is needed later on to send the stop message.
+        /// </summary>
+        /// <param name="runningTask">Running task.</param>
+        public void OnNext(IRunningTask runningTask)
+        {
+            _runningTasks.Add(runningTask);
+        }
+
+        /// <summary>
+        /// Specifies what to do when the message is received from task.
+        /// If we receive message from task that it is done (done = 1), and 
+        /// we got these messages from all the evaluators we send close signal to 
+        /// all the tasks.
+        /// </summary>
+        /// <param name="value"></param>
+        public void OnNext(ITaskMessage value)
+        {
+            lock (_lockForDoneTasks)
+            {
+                int done = BitConverter.ToInt32(value.Message, 0);
+                if (!_doneTaskIds.Contains(value.TaskId) && done == 1)
+                {
+                    _doneTaskIds.Add(value.TaskId);
+                    if (_doneTaskIds.Count == _numEvaluators)
+                    {
+                        foreach (var runningTask in _runningTasks)
+                        {
+                            runningTask.Dispose(Encoding.UTF8.GetBytes(ClosingMessage));
+                        }
+                    }
+                }
+            }
+        }
+
         public void OnCompleted()
         {
         }
 
-        public void OnNext(IFailedEvaluator value)
-        {
-        }
-
+        /// <summary>
+        /// Requests evaluators once driver starts
+        /// </summary>
         public void OnNext(IDriverStarted value)
         {
             var request =

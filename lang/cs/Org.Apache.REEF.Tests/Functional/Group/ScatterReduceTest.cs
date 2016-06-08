@@ -64,9 +64,10 @@ namespace Org.Apache.REEF.Tests.Functional.Group
                DriverConfiguration.ConfigurationModule
                    .Set(DriverConfiguration.OnDriverStarted, GenericType<ScatterReduceDriver>.Class)
                    .Set(DriverConfiguration.OnEvaluatorAllocated, GenericType<ScatterReduceDriver>.Class)
-                   .Set(DriverConfiguration.OnEvaluatorFailed, GenericType<ScatterReduceDriver>.Class)
+                   .Set(DriverConfiguration.OnTaskRunning, GenericType<ScatterReduceDriver>.Class)
                    .Set(DriverConfiguration.OnContextActive, GenericType<ScatterReduceDriver>.Class)
                    .Set(DriverConfiguration.CustomTraceLevel, Level.Info.ToString())
+                   .Set(DriverConfiguration.OnTaskMessage, GenericType<ScatterReduceDriver>.Class)
                    .Build())
                .BindNamedParameter<GroupTestConfig.NumEvaluators, int>(
                    GenericType<GroupTestConfig.NumEvaluators>.Class,
