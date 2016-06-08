@@ -15,21 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using Org.Apache.REEF.Common.Tasks;
-using Org.Apache.REEF.Common.Tasks.Events;
 using Org.Apache.REEF.Network.Group.Operators;
 using Org.Apache.REEF.Network.Group.Task;
 using Org.Apache.REEF.Tang.Annotations;
-using Org.Apache.REEF.Utilities;
 using Org.Apache.REEF.Utilities.Logging;
 
 namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDriverAndTasks
 {
-    public class MasterTask : ITask, IObserver<ICloseEvent>, ITaskMessageSource
+    public class MasterTask : ITask
     {
         private static readonly Logger Logger = Logger.GetLogger(typeof(MasterTask));
 
@@ -37,9 +33,6 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
         private readonly ICommunicationGroupClient _commGroup;
         private readonly IScatterSender<int> _scatterSender;
         private readonly IReduceReceiver<int> _sumReducer;
-        private readonly ManualResetEventSlim _waitToCloseEvent = new ManualResetEventSlim(false);
-        private int _disposed = 0;
-        private int _doneMessage = 0;
 
         [Inject]
         public MasterTask(IGroupCommClient groupCommClient)
@@ -60,56 +53,17 @@ namespace Org.Apache.REEF.Network.Examples.GroupCommunication.ScatterReduceDrive
             int sum = _sumReducer.Reduce();
             Logger.Log(Level.Info, "Received sum: {0}", sum);
 
-            _doneMessage = 1;
-            _waitToCloseEvent.Wait();
             return null;
         }
 
-        /// <summary>
-        /// Diposes the group comm. client
-        /// </summary>
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) == 0)
-            {
-                _groupCommClient.Dispose();
-            }
+            _groupCommClient.Dispose();
         }
 
-        /// <summary>
-        /// Signals the task to exit
-        /// </summary>
-        /// <param name="value">Close event. Does not matter in this case.</param>
-        public void OnNext(ICloseEvent value)
+        private List<string> GetScatterOrder()
         {
-            _waitToCloseEvent.Set();
-        }
-
-        public void OnError(Exception error)
-        {
-        }
-
-        public void OnCompleted()
-        {
-        }
-
-        /// <summary>
-        /// Message to be sent to driver. Sends done signal once task is 
-        /// ready to exit.
-        /// </summary>
-        public Optional<TaskMessage> Message
-        {
-            get
-            {
-                int done = _doneMessage;
-                TaskMessage message = TaskMessage.From(
-                    "slave",
-                    BitConverter.GetBytes(done));
-                return Optional<TaskMessage>.Of(message);
-            }
-            set
-            {
-            }
+            return new List<string> { "SlaveTask-4", "SlaveTask-3", "SlaveTask-2", "SlaveTask-1" };
         }
     }
 }

@@ -53,9 +53,8 @@ namespace Org.Apache.REEF.Network.Examples.Client
                 DriverConfiguration.ConfigurationModule
                     .Set(DriverConfiguration.OnDriverStarted, GenericType<BroadcastReduceDriver>.Class)
                     .Set(DriverConfiguration.OnEvaluatorAllocated, GenericType<BroadcastReduceDriver>.Class)
+                    .Set(DriverConfiguration.OnEvaluatorFailed, GenericType<BroadcastReduceDriver>.Class)
                     .Set(DriverConfiguration.OnContextActive, GenericType<BroadcastReduceDriver>.Class)
-                    .Set(DriverConfiguration.OnTaskRunning, GenericType<BroadcastReduceDriver>.Class)
-                    .Set(DriverConfiguration.OnTaskMessage, GenericType<BroadcastReduceDriver>.Class)
                     .Set(DriverConfiguration.CustomTraceLevel, Level.Info.ToString())
                     .Build())
                 .BindNamedParameter<GroupTestConfig.NumIterations, int>(
