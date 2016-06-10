@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Threading;
 using Org.Apache.REEF.Wake.Util;
 
 namespace Org.Apache.REEF.Wake.Remote.Impl
@@ -31,6 +32,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         private readonly ConcurrentDictionary<IPEndPoint, IObserver<T>> _endpointMap;
         private readonly ConcurrentDictionary<Type, IObserver<IRemoteMessage<T>>> _typeMap;
         private IObserver<T> _universalObserver;
+        private int _completedMessageReceived = 0;
 
         /// <summary>
         /// Constructs a new ObserverContainer used to manage remote IObservers.
@@ -143,10 +145,28 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         }
 
         /// <summary>
-        /// Ignore when we receive OnCompleted() Signal.
+        /// Receive OnCompleted() Signal. Singals all the observers. Multiple 
+        /// calls are ignored.
         /// </summary>
         public void OnCompleted()
         {
+            if (Interlocked.Exchange(ref _completedMessageReceived, 1) == 0)
+            {
+                if (_universalObserver != null)
+                {
+                    _universalObserver.OnCompleted();
+                }
+
+                foreach (var observer in _endpointMap.Values)
+                {
+                    observer.OnCompleted();
+                }
+
+                foreach (var observer in _typeMap.Values)
+                {
+                    observer.OnCompleted();
+                }                
+            }
         }
     }
 }

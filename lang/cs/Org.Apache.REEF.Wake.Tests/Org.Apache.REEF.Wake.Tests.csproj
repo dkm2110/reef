@@ -44,6 +44,7 @@ under the License.
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BuggyStringStreamingcodec.cs" />
     <Compile Include="ClockTest.cs" />
     <Compile Include="MockObserver.cs" />
     <Compile Include="MultiCodecTest.cs" />

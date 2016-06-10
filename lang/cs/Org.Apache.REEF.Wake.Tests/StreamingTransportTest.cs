@@ -23,6 +23,7 @@ using System.Net;
 using System.Reactive;
 using System.Threading;
 using System.Threading.Tasks;
+using Org.Apache.REEF.Tang.Annotations;
 using Org.Apache.REEF.Tang.Implementations.Tang;
 using Org.Apache.REEF.Tang.Interface;
 using Org.Apache.REEF.Wake.Remote;
@@ -197,7 +198,7 @@ namespace Org.Apache.REEF.Wake.Tests
         [Fact]
         public void TestClientWriteErrorAndServerOnError()
         {
-            IStreamingCodec<string> stringCodec = _injector.GetInstance<StringStreamingCodec>();
+            IStreamingCodec<string> stringCodec = _injector.GetInstance<BuggyStringStreamingCodec>();
             IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, 0);
             var remoteHandler = new MockObserver<TransportEvent<string>>();
 
@@ -211,10 +212,9 @@ namespace Org.Apache.REEF.Wake.Tests
 
                 IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), server.LocalEndpoint.Port);
                 var client = new StreamingTransportClient<string>(remoteEndpoint, stringCodec, _tcpClientFactory);
-                client.Send("Hello");
-                client.Send(", ");
-                client.Link.Dispose();
 
+                client.Send("Hello");
+                client.Dispose();
                 try
                 {
                     client.Send("World");
@@ -226,9 +226,9 @@ namespace Org.Apache.REEF.Wake.Tests
                 }
 
                 int sleepTimeinMs = 500;
-                int reTries = 100;
+                int retries = 100;
 
-                for (int i = 0; i < reTries; i++)
+                for (int i = 0; i < retries; i++)
                 {
                     int errorCount = remoteHandler.OnErrorCounter;
                     if (errorCount > 0)
@@ -241,71 +241,9 @@ namespace Org.Apache.REEF.Wake.Tests
                 Assert.True(false, "OnError condition in StreamingTransportServer not reached");
             }
         }
-
-        /// <summary>
-        /// Tests whether OnError() call is rightly executed at the server 
-        /// side if Client completes itself.
-        /// </summary>
-        [Fact]
-        public void TestServerOnError()
-        {
-            IStreamingCodec<string> stringCodec = _injector.GetInstance<StringStreamingCodec>();
-            IPEndPoint endpoint = new IPEndPoint(IPAddress.Any, 0);
-            var remoteHandler = new MockObserver<TransportEvent<string>>();
-
-            int sleepTimeinMs = 500;
-            int reTries = 100;
-            using (
-                var server = new StreamingTransportServer<string>(endpoint.Address,
-                    remoteHandler,
-                    _tcpPortProvider,
-                    stringCodec))
-            {
-                server.Run();
-
-                IPEndPoint remoteEndpoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), server.LocalEndpoint.Port);
-                using (
-                    var client = new StreamingTransportClient<string>(remoteEndpoint,
-                        stringCodec,
-                        _tcpClientFactory))
-                {
-                    client.Send("Hello");
-                    client.Send(", ");
-                    client.Send("World");
-
-                    for (int i = 0; i < reTries; i++)
-                    {
-                        int receivedCount = remoteHandler.OnNextCounter;
-                        if (receivedCount == 3)
-                        {
-                            break;
-                        }
-                        Thread.Sleep(sleepTimeinMs);
-                    }
-
-                    if (remoteHandler.OnNextCounter != 3)
-                    {
-                        Assert.True(false, "Number of received messages are not equal to 3");
-                    }
-                }
-
-                for (int i = 0; i < reTries; i++)
-                {
-                    int errorCount = remoteHandler.OnErrorCounter;
-                    if (errorCount > 0)
-                    {
-                        Assert.NotNull(remoteHandler.ThrownException.InnerException);
-                        return;
-                    }
-                    Thread.Sleep(sleepTimeinMs);
-                }
-                Assert.True(false, "OnError condition in StreamingTransportServer not reached");
-            }
-        }
-
+      
         /// <summary>
         /// Tests whether OnCompleted() call is rightly executed at the server 
-        /// side if it disposes itself before client.
         /// </summary>
         [Fact]
         public void TestServerOnCompleted()

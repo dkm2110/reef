@@ -57,6 +57,10 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         private readonly INameClient _nameClient;
         private readonly Sender _sender;
         private readonly BlockingCollection<NodeStruct<T>> _nodesWithData;
+        private bool _exceptionOccured = false;
+        private Exception _error = null;
+        private bool _completedMessageReceived = false;
+        private int _terminationEvent = 0;
         private readonly object _thisLock = new object();
 
         /// <summary>
@@ -170,6 +174,7 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
                     throw new NullReferenceException("message passed not of type GroupCommunicationMessage");
                 }
 
+                Console.WriteLine("Adding data from id {0}", sourceNode.Identifier);
                 sourceNode.AddData(message);
             }
         }
@@ -264,7 +269,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
             }
             if (order == null || order.Count != _children.Count)
             {
-                throw new ArgumentException("order cannot be null and must have the same number of elements as child tasks");
+                throw new ArgumentException(
+                    "order cannot be null and must have the same number of elements as child tasks");
             }
 
             List<NodeStruct<T>> nodes = new List<NodeStruct<T>>();
@@ -331,10 +337,14 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
 
                 foreach (var child in childrenWithData)
                 {
+                    Console.WriteLine("gettng data from:!!!!!!!!!!!! {0}", child.Identifier);
                     T[] data = ReceiveFromNode(child);
+                    Console.WriteLine("got data from:!!!!!!!!!!!! {0}", child.Identifier);
+
                     if (data == null || data.Length != 1)
                     {
-                        throw new InvalidOperationException("Received invalid data from child with id: " + child.Identifier);
+                        throw new InvalidOperationException("Received invalid data from child with id: " +
+                                                            child.Identifier);
                     }
 
                     receivedData.Add(data[0]);
@@ -352,28 +362,43 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         public void OnError(Exception error)
         {
             Logger.Log(Level.Info, "Adding erroneous data");
-            var errorMessage = GroupCommunicationMessage<T>.GenerateErrorMessage(error);
-            lock (_thisLock)
+            Console.WriteLine("!!!!!!got error message");
+
+            if (Interlocked.Exchange(ref _terminationEvent, 1) == 0)
             {
-                if (_children != null)
+                _exceptionOccured = true;
+                _error = error;
+                foreach (var node in _children)
                 {
-                    foreach (var node in _children)
-                    {
-                        node.AddData(errorMessage);
-                        _nodesWithData.Add(node);
-                    }
+                    node.SendNonBlockingSignal();
                 }
 
                 if (_parent != null)
                 {
-                    _parent.AddData(errorMessage);
-                    _nodesWithData.Add(_parent);
+                    _parent.SendNonBlockingSignal();
                 }
+                _nodesWithData.CompleteAdding();
             }
         }
 
         public void OnCompleted()
         {
+            Logger.Log(Level.Info, "Notifying completion");
+
+            if (Interlocked.Exchange(ref _terminationEvent, 1) == 0)
+            {
+                _completedMessageReceived = true;
+                foreach (var node in _children)
+                {
+                    node.SendNonBlockingSignal();
+                }
+
+                if (_parent != null)
+                {
+                    _parent.SendNonBlockingSignal();
+                }
+                _nodesWithData.CompleteAdding();
+            }
         }
 
         public bool HasChildren()
@@ -415,15 +440,29 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
 
                     while (_nodesWithData.Count != 0)
                     {
-                        _nodesWithData.Take();
+                        NodeStruct<T> node;
+                        if (!_nodesWithData.TryTake(out node, -1))
+                        {
+                            throw new Exception(
+                                "No node present in the queue and completion or error notification has been recevied. Should not have reached here");
+                        }
                     }
                 }
 
-                var potentialNode = _nodesWithData.Take();
+                NodeStruct<T> potentialNode;
+                if (!_nodesWithData.TryTake(out potentialNode, -1))
+                {
+                    throw new Exception(
+                        "No node present in the queue and completion or error notification has been recevied. Should not have reached here");
+                }
 
                 while (!nodeSetIdentifier.Contains(potentialNode.Identifier))
                 {
-                    potentialNode = _nodesWithData.Take();
+                    if (!_nodesWithData.TryTake(out potentialNode, -1))
+                    {
+                        throw new Exception(
+                            "No node present in the queue and completion or error notification has been recevied. Should not have reached here");
+                    }
                 }
 
                 return new NodeStruct<T>[] { potentialNode };
@@ -452,8 +491,11 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         /// <param name="node">The NodeStruct representing the Task to send to</param>
         private void SendToNode(T message, NodeStruct<T> node)
         {
-            GeneralGroupCommunicationMessage gcm = new GroupCommunicationMessage<T>(_groupName, _operatorName,
-                _selfId, node.Identifier, message);
+            GeneralGroupCommunicationMessage gcm = new GroupCommunicationMessage<T>(_groupName,
+                _operatorName,
+                _selfId,
+                node.Identifier,
+                message);
 
             _sender.Send(gcm);
         }
@@ -467,8 +509,11 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         {
             T[] encodedMessages = messages.ToArray();
 
-            GroupCommunicationMessage<T> gcm = new GroupCommunicationMessage<T>(_groupName, _operatorName,
-                _selfId, node.Identifier, encodedMessages);
+            GroupCommunicationMessage<T> gcm = new GroupCommunicationMessage<T>(_groupName,
+                _operatorName,
+                _selfId,
+                node.Identifier,
+                encodedMessages);
 
             _sender.Send(gcm);
         }
@@ -482,7 +527,23 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         private T[] ReceiveFromNode(NodeStruct<T> node)
         {
             var data = node.GetData();
-            return data;
+            if (data.IsPresent())
+            {
+                return data.Value;
+            }
+            
+            if (_completedMessageReceived)
+            {
+                throw new Exception(
+                    "Already received a completed notification in Group Communication. Should not be asking for more data.");
+            }
+            
+            if (_exceptionOccured)
+            {
+                throw _error;
+            }
+            throw new Exception(
+                "Neither exception occured nor completion notification received. But still not able to read the data from blocking queue.");
         }
 
         /// <summary>

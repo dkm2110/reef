@@ -107,6 +107,10 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                 _cancellationSource.Cancel();
                 _link.Dispose();
                 _disposed = true;
+                if (_observer != null)
+                {
+                    _observer.OnCompleted();
+                }
             }
         }
 
@@ -119,33 +123,18 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             {
                 try
                 {
-                    T message = await _link.ReadAsync(_cancellationSource.Token);
-                    if (message == null)
+                    var message = await _link.ReadAsync(_cancellationSource.Token);
+                    if (!message.IsPresent())
                     {
-                        if (_cancellationSource.IsCancellationRequested)
-                        {
-                            _observer.OnCompleted();
-                        }
-                        else
-                        {
-                            _observer.OnError(
-                                new WakeRemoteExceptionWithEndPoint(
-                                    new Exception("Message received in StreamingTransportClient is null"),
-                                    _remoteEndPoint));
-                        }
                         break;
                     }
 
-                    TransportEvent<T> transportEvent = new TransportEvent<T>(message, _link);
+                    TransportEvent<T> transportEvent = new TransportEvent<T>(message.Value, _link);
                     _observer.OnNext(transportEvent);
                 }
                 catch (Exception e)
                 {
-                    if (_cancellationSource.IsCancellationRequested)
-                    {
-                        _observer.OnCompleted();
-                    }
-                    else
+                    if (!_cancellationSource.IsCancellationRequested)
                     {
                         _observer.OnError(new WakeRemoteExceptionWithEndPoint(e, _remoteEndPoint));
                     }

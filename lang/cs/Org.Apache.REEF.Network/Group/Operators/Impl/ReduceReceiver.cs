@@ -74,7 +74,7 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             _topology = topology;
 
             var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(topology.OnNext,
-                topology.OnError);
+                topology.OnError, topology.OnCompleted);
             networkHandler.Register(operatorName, msgHandler);
         }
 

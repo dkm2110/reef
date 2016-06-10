@@ -19,6 +19,8 @@ using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using Org.Apache.REEF.Utilities;
+using Org.Apache.REEF.Wake.Remote.Impl;
 
 namespace Org.Apache.REEF.Wake.Remote
 {
@@ -55,12 +57,12 @@ namespace Org.Apache.REEF.Wake.Remote
         /// </summary>
         /// <returns>The read data</returns>
         /// <param name="token">The cancellation token</param>
-        Task<T> ReadAsync(CancellationToken token);
+        Task<Optional<T>> ReadAsync(CancellationToken token);
 
         /// <summary>
         /// Reads the value from this link synchronously
         /// </summary>
         /// <returns>The read data</returns>
-        T Read();
+        Optional<T> Read();
     }
 }

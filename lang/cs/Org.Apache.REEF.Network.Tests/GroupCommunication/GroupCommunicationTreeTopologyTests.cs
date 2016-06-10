@@ -112,7 +112,115 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
         /// error message upstream and come out.
         /// </summary>       
         [Fact]
-        public void TestReduceOperatorException()
+        public void TestReduceOperatorExceptionWhenReadingAfterDispose()
+        {
+            string groupName = "group1";
+            string operatorName = "reduce";
+            int numTasks = 10;
+            string driverId = "driverId";
+            string masterTaskId = "task0";
+            int fanOut = 2;
+
+            var groupCommDriver = GroupCommunicationTests.GetInstanceOfGroupCommDriver(driverId,
+                masterTaskId,
+                groupName,
+                fanOut,
+                numTasks);
+
+            ICommunicationGroupDriver commGroup = groupCommDriver.DefaultGroup
+                .AddReduce<int>(operatorName,
+                    masterTaskId,
+                    TopologyTypes.Tree,
+                    GetDefaultDataConverterConfig(),
+                    GetDefaultReduceFuncConfig())
+                .Build();
+
+            List<StreamingNetworkService<GeneralGroupCommunicationMessage>> networkServiceList;
+            var commGroups = GroupCommunicationTests.GroupCommunicationClients(groupName,
+                numTasks,
+                groupCommDriver,
+                commGroup,
+                GetDefaultCodecConfig(),
+                out networkServiceList);
+
+            IReduceReceiver<int> receiver = commGroups[0].GetReduceReceiver<int>(operatorName);
+            IReduceSender<int> sender1 = commGroups[1].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender2 = commGroups[2].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender3 = commGroups[3].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender4 = commGroups[4].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender5 = commGroups[5].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender6 = commGroups[6].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender7 = commGroups[7].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender8 = commGroups[8].GetReduceSender<int>(operatorName);
+            IReduceSender<int> sender9 = commGroups[9].GetReduceSender<int>(operatorName);
+
+            Assert.NotNull(receiver);
+            Assert.NotNull(sender1);
+            Assert.NotNull(sender2);
+            Assert.NotNull(sender3);
+            Assert.NotNull(sender4);
+            Assert.NotNull(sender5);
+            Assert.NotNull(sender6);
+            Assert.NotNull(sender7);
+            Assert.NotNull(sender8);
+            Assert.NotNull(sender9);
+
+            sender9.Send(9);
+            sender8.Send(8);
+            sender7.Send(7);
+            sender6.Send(6);
+            sender5.Send(5);
+            sender4.Send(4);
+            sender3.Send(3);
+            sender2.Send(2);
+            sender1.Send(1);
+
+            Assert.Equal(45, receiver.Reduce());
+
+            // networkServiceList[1].Dispose();            
+            networkServiceList[5].Dispose();
+            
+            // networkServiceList[7].Dispose();
+            // sender 2 is sender 5 parent
+            try
+            {
+                sender2.Send(2);
+                Assert.True(false, "The reduce operation is supposed to fail for this node");
+            }
+            catch
+            {
+                // ignored
+            }
+
+            /*// sender 3 is sender 7 parent
+            try
+            {
+                sender3.Send(3);
+                Assert.True(false, "The reduce operation is supposed to fail for this node");
+            }
+            catch
+            {
+                // ignored
+            }
+
+            // master is sender 1 parent
+            try
+            {
+                receiver.Reduce();
+                Assert.True(false, "The reduce operation is supposed to fail for this node");
+            }
+            catch
+            {
+                // ignored
+            }*/
+        }
+
+        /// <summary>
+        /// Tests that if a node fails in broadcast, the children of the nodes receive the 
+        /// error message upstream and come out.
+        /// </summary>       
+        [Fact]
+        public void TestReduceOperatorExceptionWithBuggyCodec()
         {
             string groupName = "group1";
             string operatorName = "reduce";
@@ -175,17 +283,17 @@ namespace Org.Apache.REEF.Network.Tests.GroupCommunication
 
             // sender 2 is sender 5 parent
             Action send1 = () => sender2.Send(2);
-           
+
             // sender 3 is sender 7 parent
             Action send2 = () => sender3.Send(3);
-            
+
             // master is sender 1 parent
             Action receive1 = () => receiver.Reduce();
             Assert.Throws<Exception>(send1);
             Assert.Throws<Exception>(send2);
             Assert.Throws<Exception>(receive1);
         }
-      
+
         [Fact]
         public void TestBroadcastOperator()
         {

@@ -63,7 +63,7 @@ namespace Org.Apache.REEF.Network.Group.Operators.Impl
             _initialize = initialize;
 
             var msgHandler = Observer.Create<GeneralGroupCommunicationMessage>(topology.OnNext,
-              topology.OnError);
+              topology.OnError, topology.OnCompleted);
             networkHandler.Register(operatorName, msgHandler);
         }
 

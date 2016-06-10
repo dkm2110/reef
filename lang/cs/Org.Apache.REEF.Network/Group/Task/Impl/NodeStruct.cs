@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Concurrent;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
+using Org.Apache.REEF.Utilities;
 
 namespace Org.Apache.REEF.Network.Group.Task.Impl
 {
@@ -51,16 +52,11 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         /// if message is of type error.
         /// </summary>
         /// <returns>The first available message.</returns>
-        internal T[] GetData()
+        internal Optional<T[]> GetData()
         {
-            var message = _messageQueue.Take();
-            if (message.MessageType == GroupCommMessageStatus.Data)
-            {
-                return message.Data;
-            }
-
-            Console.WriteLine("Throwing error in node struct");
-            throw message.ErrorMessage.UnderlyingException;
+            GroupCommunicationMessage<T> message;
+            bool messagePresent = _messageQueue.TryTake(out message, -1);
+            return messagePresent ? Optional<T[]>.Of(message.Data) : Optional<T[]>.Empty();        
         }
 
         /// <summary>
@@ -86,6 +82,14 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Specifies that node should not block on the queue.
+        /// </summary>
+        internal void SendNonBlockingSignal()
+        {
+            _messageQueue.CompleteAdding();
         }
     }
 }

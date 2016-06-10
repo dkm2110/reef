@@ -57,6 +57,7 @@ under the License.
     <Compile Include="Remote\Impl\DefaultLocalAddressProvider.cs" />
     <Compile Include="Remote\Impl\LoopbackLocalAddressProvider.cs" />
     <Compile Include="Remote\Impl\RemoteEventStreamingCodec.cs" />
+    <Compile Include="Remote\Impl\RemoteData.cs" />
     <Compile Include="Remote\Impl\WakeRemoteExceptionWithEndPoint.cs" />
     <Compile Include="Remote\Impl\StreamingRemoteManagerFactory.cs" />
     <Compile Include="Remote\Impl\DefaultRemoteManagerFactory.cs" />
@@ -72,6 +73,7 @@ under the License.
     <Compile Include="IStage.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Remote\Impl\TcpClientConnectionException.cs" />
+    <Compile Include="Remote\Impl\ZeroBytesReadException.cs" />
     <Compile Include="Remote\IRemoteObserver.cs" />
     <Compile Include="Remote\Impl\TcpClientConnectionFactory.cs" />
     <Compile Include="Remote\ITcpClientConnectionFactory.cs" />

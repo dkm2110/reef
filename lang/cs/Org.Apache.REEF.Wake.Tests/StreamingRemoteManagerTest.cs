@@ -404,11 +404,10 @@ namespace Org.Apache.REEF.Wake.Tests
         public void TestStreamingRemoteManagerReadExceptions()
         {
             int sleepTimeinMs = 500;
-            int reTries = 100;
+            int retries = 100;
             IPAddress listeningAddress = IPAddress.Parse("127.0.0.1");
             var observer = new MockObserver<string>();
-            List<string> events = new List<string>();
-            IStreamingCodec<string> codec = TangFactory.GetTang().NewInjector().GetInstance<StringStreamingCodec>();
+            IStreamingCodec<string> codec = TangFactory.GetTang().NewInjector().GetInstance<BuggyStringStreamingCodec>();
 
             var remoteManager1 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec);
             var remoteManager2 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec);
@@ -417,27 +416,8 @@ namespace Org.Apache.REEF.Wake.Tests
 
             var remoteObserver = remoteManager1.GetRemoteObserver(remoteManager2.LocalEndpoint);
             remoteObserver.OnNext("abc");
-            remoteObserver.OnNext("def");
-            remoteObserver.OnNext("ghi");
-
-            for (int i = 0; i < reTries; i++)
-            {
-                int receivedCount = observer.OnNextCounter;
-                if (receivedCount == 3)
-                {
-                    break;
-                }
-                Thread.Sleep(sleepTimeinMs);
-            }
-
-            if (observer.OnNextCounter != 3)
-            {
-                Assert.True(false, "Number of received messages are not equal to 3");
-            }
-
-            remoteManager1.Dispose();
           
-            for (int i = 0; i < reTries; i++)
+            for (int i = 0; i < retries; i++)
             {
                 int errorCount = observer.OnErrorCounter;
                 if (errorCount > 0)
@@ -448,6 +428,67 @@ namespace Org.Apache.REEF.Wake.Tests
                 Thread.Sleep(sleepTimeinMs);
             }
             Assert.True(false, "OnError condition not reached in the observer");
+        }
+
+        /// <summary>
+        /// Tests that Server and Client call the OnCompleted of appropriate 
+        /// observer.
+        /// </summary>
+        [Fact]
+        public void TestServerandClientOnCompletedCalls()
+        {
+            int sleepTimeinMs = 500;
+            int retries = 100;
+            IPAddress listeningAddress = IPAddress.Parse("127.0.0.1");
+
+            BlockingCollection<string> queue = new BlockingCollection<string>();
+            List<string> events = new List<string>();
+            IStreamingCodec<string> codec = TangFactory.GetTang().NewInjector().GetInstance<StringStreamingCodec>();
+            var observers = new MockObserver<string>[2];
+            observers[0] = new MockObserver<string>();
+            observers[1] = new MockObserver<string>();
+
+            using (var remoteManager1 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec))
+            using (var remoteManager2 = _remoteManagerFactory1.GetInstance<string>(listeningAddress, codec))
+            {
+                IPEndPoint endpoint = new IPEndPoint(listeningAddress, 0);
+                remoteManager2.RegisterObserver(endpoint, observers[0]);
+                remoteManager1.RegisterObserver(endpoint, observers[1]);
+
+                var remoteObserver = remoteManager1.GetRemoteObserver(remoteManager2.LocalEndpoint);
+                remoteObserver.OnNext("abc");
+                remoteObserver.OnNext("def");
+                remoteObserver.OnNext("ghi");
+
+                for (int i = 0; i < retries; i++)
+                {
+                    int receivedCount = observers[0].OnNextCounter;
+                    if (receivedCount == 3)
+                    {
+                        break;
+                    }
+                    Thread.Sleep(sleepTimeinMs);
+                }
+            }
+
+            // Check that OnCompleted was called.
+            for (int j = 0; j < 2; j++)
+            {
+                for (int i = 0; i < retries; i++)
+                {
+                    int completedCount = observers[j].OnCompletedCounter;
+                    if (completedCount > 0)
+                    {
+                        break;
+                    }
+                    Thread.Sleep(sleepTimeinMs);
+                }
+
+                if (observers[j].OnCompletedCounter == 0)
+                {
+                    Assert.True(false, "OnCompleted() should have been called.");
+                }
+            }
         }
     }
 }

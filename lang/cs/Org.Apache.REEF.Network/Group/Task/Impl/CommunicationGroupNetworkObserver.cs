@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Org.Apache.REEF.Network.Group.Driver.Impl;
 using Org.Apache.REEF.Tang.Annotations;
 using Org.Apache.REEF.Utilities.Diagnostics;
@@ -32,6 +33,8 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
     {
         private static readonly Logger LOGGER = Logger.GetLogger(typeof(CommunicationGroupNetworkObserver));
         private readonly Dictionary<string, IObserver<GeneralGroupCommunicationMessage>> _handlers;
+        private int _completedMessageReceived = 0;
+        private int _errorMessageReceived = 0;
 
         /// <summary>
         /// Creates a new CommunicationGroupNetworkObserver.
@@ -107,15 +110,24 @@ namespace Org.Apache.REEF.Network.Group.Task.Impl
         /// <param name="error">The error message</param>
         public void OnError(Exception error)
         {
-            var exception = error;
-            foreach (var handler in _handlers)
+            if (Interlocked.Exchange(ref _errorMessageReceived, 1) == 0)
             {
-                handler.Value.OnError(exception);
+                foreach (var handler in _handlers)
+                {
+                    handler.Value.OnError(error);
+                }
             }
         }
 
         public void OnCompleted()
         {
+            if (Interlocked.Exchange(ref _completedMessageReceived, 1) == 0)
+            {
+                foreach (var handler in _handlers)
+                {
+                    handler.Value.OnCompleted();
+                }
+            }
         }
     }
 }

@@ -119,6 +119,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             if (!_disposed)
             {
                 _cancellationSource.Cancel();
+                _remoteObserver.OnCompleted();
 
                 try
                 {
@@ -189,7 +190,7 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
             token.Register(() =>
             {
                 disposing = true;
-                stream.Close();
+                stream.Dispose();
             });
 
             using (ILink<T> link = new StreamingLink<T>(client, _streamingCodec))
@@ -200,35 +201,21 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
                 {
                     try
                     {
-                        T message = await link.ReadAsync(token);
+                        var message = await link.ReadAsync(token);
 
-                        if (message == null)
+                        if (!message.IsPresent())
                         {
-                            if (disposing)
-                            {
-                                _remoteObserver.OnCompleted();
-                            }
-                            else
-                            {
-                                _remoteObserver.OnError(
-                                    new WakeRemoteExceptionWithEndPoint(
-                                        new Exception("Message received in StreamingTransportServer is null"),
-                                        remoteEndPoint));
-                            }
                             break;
                         }
 
-                        TransportEvent<T> transportEvent = new TransportEvent<T>(message, link);
+                        TransportEvent<T> transportEvent = new TransportEvent<T>(message.Value, link);
+                        Console.WriteLine("$$$$ In server got a valid message");
                         _remoteObserver.OnNext(transportEvent);
                     }
                     catch (Exception e)
                     {
                         Logger.Log(Level.Info, "In server error receioved: " + e.ToString());
-                        if (disposing)
-                        {
-                            _remoteObserver.OnCompleted();
-                        }
-                        else
+                        if (!disposing)
                         {
                             _remoteObserver.OnError(new WakeRemoteExceptionWithEndPoint(e, remoteEndPoint));
                         }

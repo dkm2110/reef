@@ -229,7 +229,7 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
         public void TestStreamingNetworkServiceReadError()
         {
             int sleepTimeinMs = 500;
-            int reTries = 100;
+            int retries = 100;
             int networkServicePort1 = NetworkUtils.GenerateRandomPort(6000, 7000);
             int networkServicePort2 = NetworkUtils.GenerateRandomPort(7001, 8000);
 
@@ -256,12 +256,14 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
                 var networkServiceInjection1 = BuildNetworkService(networkServicePort1,
                     nameServerPort,
                     nameServerAddr,
-                    handlerConf1);
+                    handlerConf1,
+                    true);
 
                 var networkServiceInjection2 = BuildNetworkService(networkServicePort2,
                     nameServerPort,
                     nameServerAddr,
-                    handlerConf2);
+                    handlerConf2,
+                    true);
 
                 INetworkService<string> networkService1 =
                     networkServiceInjection1.GetInstance<StreamingNetworkService<string>>();
@@ -278,27 +280,9 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
                 {
                     connection.Open();
                     connection.Write("abc");
-                    connection.Write("def");
-                    connection.Write("ghi");
-
-                    for (int i = 0; i < reTries; i++)
-                    {
-                        int receivedCount = observer.OnNextCounter;
-                        if (receivedCount == 3)
-                        {
-                            break;
-                        }
-                        Thread.Sleep(sleepTimeinMs);
-                    }
-
-                    if (observer.OnNextCounter != 3)
-                    {
-                        Assert.True(false, "Number of received messages are not equal to 3");
-                    }
                 }
-                networkService1.Dispose();
 
-                for (int i = 0; i < reTries; i++)
+                for (int i = 0; i < retries; i++)
                 {
                     int errorCount = observer.OnErrorCounter;
                     if (errorCount > 0)
@@ -385,20 +369,111 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
         }
 
         /// <summary>
+        /// Tests that OnCompleted() message is received when NetworkService terminates properly.
+        /// </summary>
+        [Fact]
+        public void TestStreamingNetworkServiceTerminatesProperly()
+        {
+            int networkServicePort1 = NetworkUtils.GenerateRandomPort(6000, 7000);
+            int networkServicePort2 = NetworkUtils.GenerateRandomPort(7001, 8000);
+
+            using (var nameServer = NameServerTests.BuildNameServer())
+            {
+                IPEndPoint endpoint = nameServer.LocalEndpoint;
+                int nameServerPort = endpoint.Port;
+                string nameServerAddr = endpoint.Address.ToString();
+
+                var handlerConf =
+                    TangFactory.GetTang()
+                        .NewConfigurationBuilder()
+                        .BindImplementation(GenericType<IObserver<NsMessage<string>>>.Class,
+                            GenericType<MockObserver<NsMessage<string>>>.Class)
+                        .Build();
+
+                var networkServiceInjection1 = BuildNetworkService(networkServicePort1, nameServerPort, nameServerAddr,
+                    handlerConf);
+
+                var networkServiceInjection2 = BuildNetworkService(networkServicePort2, nameServerPort, nameServerAddr,
+                   handlerConf);
+
+                MockObserver<NsMessage<string>>[] observers = new MockObserver<NsMessage<string>>[2];
+                using (INetworkService<string> networkService1 = networkServiceInjection1.GetInstance<StreamingNetworkService<string>>())
+                using (INetworkService<string> networkService2 = networkServiceInjection2.GetInstance<StreamingNetworkService<string>>())
+                {
+                    observers[0] = networkServiceInjection1.GetInstance<MockObserver<NsMessage<string>>>();
+                    observers[1] = networkServiceInjection2.GetInstance<MockObserver<NsMessage<string>>>();
+
+                    IIdentifier id1 = new StringIdentifier("service1");
+                    IIdentifier id2 = new StringIdentifier("service2");
+                    networkService1.Register(id1);
+                    networkService2.Register(id2);
+
+                    using (IConnection<string> connection1 = networkService1.NewConnection(id2))
+                    using (IConnection<string> connection2 = networkService2.NewConnection(id1))
+                    {
+                        connection1.Open();
+                        connection1.Write("abc");
+                        connection1.Write("def");
+                        connection1.Write("ghi");
+
+                        connection2.Open();
+                        connection2.Write("jkl");
+                        connection2.Write("nop");
+                    }
+                }
+
+                int retries = 100;
+                int sleepTimeinMs = 500;
+
+                // Check that OnCompleted() was called on the observers
+                for (int j = 0; j < 2; j++)
+                {
+                    for (int i = 0; i < retries; i++)
+                    {
+                        int completedCount = observers[j].OnCompletedCounter;
+                        if (completedCount > 0)
+                        {
+                            break;
+                        }
+                        Thread.Sleep(sleepTimeinMs);
+                    }
+                    if (observers[j].OnCompletedCounter == 0)
+                    {
+                        Assert.True(false, "OnCompleted() should have been called.");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Creates an instance of network service.
         /// </summary>
         /// <param name="networkServicePort">The port that the NetworkService will listen on</param>
         /// <param name="nameServicePort">The port of the NameServer</param>
         /// <param name="nameServiceAddr">The ip address of the NameServer</param>
         /// <param name="handlerConf">The configuration of observer to handle incoming messages</param>
+        /// <param name="buggycodec">Specifies whether to use buggy streaming codec or actual one</param>
         /// <returns></returns>
         private IInjector BuildNetworkService(
             int networkServicePort,
             int nameServicePort,
             string nameServiceAddr,
-            IConfiguration handlerConf)
+            IConfiguration handlerConf,
+            bool buggycodec = false)
         {
-            var networkServiceConf = TangFactory.GetTang().NewConfigurationBuilder(handlerConf)
+            var codecConfig = buggycodec
+                ? TangFactory.GetTang()
+                    .NewConfigurationBuilder()
+                    .BindImplementation(GenericType<IStreamingCodec<string>>.Class,
+                        GenericType<BuggyStringStreamingCodec>.Class)
+                    .Build()
+                : TangFactory.GetTang()
+                    .NewConfigurationBuilder()
+                    .BindImplementation(GenericType<IStreamingCodec<string>>.Class,
+                        GenericType<StringStreamingCodec>.Class)
+                    .Build();
+
+            var networkServiceConf = TangFactory.GetTang().NewConfigurationBuilder(handlerConf, codecConfig)
                 .BindNamedParameter<NetworkServiceOptions.NetworkServicePort, int>(
                     GenericType<NetworkServiceOptions.NetworkServicePort>.Class,
                     networkServicePort.ToString(CultureInfo.CurrentCulture))
@@ -409,7 +484,6 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
                     GenericType<NamingConfigurationOptions.NameServerAddress>.Class,
                     nameServiceAddr)
                 .BindImplementation(GenericType<INameClient>.Class, GenericType<NameClient>.Class)
-                .BindImplementation(GenericType<IStreamingCodec<string>>.Class, GenericType<StringStreamingCodec>.Class)
                 .Build();
 
             return TangFactory.GetTang().NewInjector(networkServiceConf);
@@ -486,12 +560,10 @@ namespace Org.Apache.REEF.Network.Tests.NetworkService
 
             public void OnError(Exception error)
             {
-                throw new NotImplementedException();
             }
 
             public void OnCompleted()
             {
-                throw new NotImplementedException();
             }
         }
 

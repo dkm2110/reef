@@ -125,13 +125,13 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         {
             while (!_cancellationSource.IsCancellationRequested)
             {
-                T message = await _link.ReadAsync(_cancellationSource.Token);
-                if (message == null)
+                var message = await _link.ReadAsync(_cancellationSource.Token);
+                if (!message.IsPresent())
                 {
                     break;
                 }
 
-                TransportEvent<T> transportEvent = new TransportEvent<T>(message, _link);
+                TransportEvent<T> transportEvent = new TransportEvent<T>(message.Value, _link);
                 _observer.OnNext(transportEvent);
             }
         }

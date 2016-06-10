@@ -21,6 +21,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Org.Apache.REEF.Tang.Exceptions;
+using Org.Apache.REEF.Utilities;
 using Org.Apache.REEF.Utilities.Diagnostics;
 using Org.Apache.REEF.Utilities.Logging;
 using Org.Apache.REEF.Wake.StreamingCodec;
@@ -148,8 +149,9 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// <summary>
         /// Reads the value from the link synchronously
         /// </summary>
-        public T Read()
+        public Optional<T> Read()
         {
+            var value = Optional<T>.Empty();
             if (_disposed)
             {
                 Exceptions.Throw(new IllegalStateException("Link has been disposed."), Logger);
@@ -157,11 +159,14 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
 
             try
             {
-                T value = _streamingCodec.Read(_reader);
-                return value;
+                return Optional<T>.Of(_streamingCodec.Read(_reader));
             }
             catch (Exception e)
             {
+                if (e is ZeroBytesReadException)
+                {
+                    return value;
+                }
                 Logger.Log(Level.Warning, "In Read function unable to read the message.");
                 Exceptions.Caught(e, Level.Error, Logger);
                 throw;
@@ -172,8 +177,10 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// Reads the value from the link asynchronously
         /// </summary>
         /// <param name="token">The cancellation token</param>
-        public async Task<T> ReadAsync(CancellationToken token)
+        public async Task<Optional<T>> ReadAsync(CancellationToken token)
         {
+            var value = Optional<T>.Empty();
+
             if (_disposed)
             {
                 Exceptions.Throw(new IllegalStateException("Link has been disposed."), Logger);
@@ -181,11 +188,14 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
 
             try
             {
-                T value = await _streamingCodec.ReadAsync(_reader, token);
-                return value;
+                return Optional<T>.Of(await _streamingCodec.ReadAsync(_reader, token));
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                if (e is ZeroBytesReadException)
+                {
+                    return value;
+                }
                 Logger.Log(Level.Warning, "In ReadAsync function unable to read the message.");
                 throw;
             }

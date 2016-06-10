@@ -21,6 +21,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Org.Apache.REEF.Tang.Exceptions;
+using Org.Apache.REEF.Utilities;
 using Org.Apache.REEF.Utilities.Diagnostics;
 using Org.Apache.REEF.Utilities.Logging;
 using Org.Apache.REEF.Wake.Util;
@@ -148,30 +149,33 @@ namespace Org.Apache.REEF.Wake.Remote.Impl
         /// <summary>
         /// Reads the value from the link synchronously
         /// </summary>
-        public T Read()
+        public Optional<T> Read()
         {
+            var value = Optional<T>.Empty();
+
             if (_disposed)
             {
                 Exceptions.Throw(new IllegalStateException("Link has been disposed."), LOGGER);
             }
 
             byte[] message = _channel.Read();
-            return (message == null) ? default(T) : _codec.Decode(message);
+            return (message == null) ? value : Optional<T>.Of(_codec.Decode(message));
         }
 
         /// <summary>
         /// Reads the value from the link asynchronously
         /// </summary>
         /// <param name="token">The cancellation token</param>
-        public async Task<T> ReadAsync(CancellationToken token)
+        public async Task<Optional<T>> ReadAsync(CancellationToken token)
         {
+            var value = Optional<T>.Empty();
             if (_disposed)
             {
                 Exceptions.Throw(new IllegalStateException("Link has been disposed."), LOGGER);
             }
 
             byte[] message = await _channel.ReadAsync(token);
-            return (message == null) ? default(T) : _codec.Decode(message);
+            return (message == null) ? value : Optional<T>.Of(_codec.Decode(message));
         }
 
         /// <summary>
