@@ -59,9 +59,8 @@ namespace Org.Apache.REEF.Common.metrics.Api
         /// </summary>
         /// <param name="info">Meta data of the metric</param>
         /// <param name="value">Value of the metric</param>
-        /// <param name="converterFunc">Function to convert integer to long</param>
         /// <returns></returns>
-        IMetricsRecordBuilder AddCounter(IMetricsInfo info, int value, Func<int, long> converterFunc);
+        IMetricsRecordBuilder AddCounter(IMetricsInfo info, int value);
 
         /// <summary>
         /// Adds long counter metric
@@ -76,9 +75,8 @@ namespace Org.Apache.REEF.Common.metrics.Api
         /// </summary>
         /// <param name="info">Meta data of the metric</param>
         /// <param name="value">Value of the metric</param>
-        /// <param name="converterFunc">Function to convert integer to long</param>
         /// <returns></returns>
-        IMetricsRecordBuilder AddGauge(IMetricsInfo info, int value, Func<int, long> converterFunc);
+        IMetricsRecordBuilder AddGauge(IMetricsInfo info, int value);
 
         /// <summary>
         /// Adds long gauge metric
@@ -93,18 +91,16 @@ namespace Org.Apache.REEF.Common.metrics.Api
         /// </summary>
         /// <param name="info">Meta data of the metric</param>
         /// <param name="value">Value of the metric</param>
-        /// <param name="converterFunc">Function to convert float to long</param>
         /// <returns></returns>
-        IMetricsRecordBuilder AddGauge(IMetricsInfo info, float value, Func<float, long> converterFunc);
+        IMetricsRecordBuilder AddGauge(IMetricsInfo info, float value);
 
         /// <summary>
         /// Adds double gauge metric
         /// </summary>
         /// <param name="info">Meta data of the metric</param>
         /// <param name="value">Value of the metric</param>
-        /// <param name="converterFunc">Function to convert double to long</param>
         /// <returns></returns>
-        IMetricsRecordBuilder AddGauge(IMetricsInfo info, double value, Func<double, long> converterFunc);
+        IMetricsRecordBuilder AddGauge(IMetricsInfo info, double value);
 
         /// <summary>
         /// Returns the parent <see cref="IMetricsCollector"/> object.
