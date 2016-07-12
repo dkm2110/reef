@@ -29,7 +29,7 @@ namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
         private readonly object _lock = new object();
 
         [Inject]
-        public MutableStat(IMetricsInfo info, [Parameter(typeof(ExtendedStatsParameter))] bool extended) : base(info)
+        public MutableStat(IStatsInfo info, [Parameter(typeof(ExtendedStatsParameter))] bool extended) : base(info)
         {
             _showExtendedStats = extended;
 
@@ -38,35 +38,35 @@ namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
             _numSamplesInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-RunningAvg";
-            desc = "Average of all samples for " + info.Description;
+            desc = "Average " + info.ValueName + " for " + info.Description;
             _runningMeanInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-RunningStdev";
-            desc = "Standard deviation of all samples for " + info.Description;
+            desc = "Standard deviation of " + info.ValueName + " for " + info.Description;
             _runningStdInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-IntervalAvg";
-            desc = "Interval Average of samples for " + info.Description;
+            desc = "Interval Average " + info.ValueName + " for " + info.Description;
             _currentMeanInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-IntervalStdev";
-            desc = "Interval Standard deviation of samples for " + info.Description;
+            desc = "Interval Standard deviation of " + info.ValueName + " for " + info.Description;
             _currentStdInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-RunningMin";
-            desc = "Min of all samples for " + info.Description;
+            desc = "Min " + info.ValueName + " for " + info.Description;
             _runningMinInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-RunningMax";
-            desc = "Max of all samples for " + info.Description;
+            desc = "Max " + info.ValueName + " for " + info.Description;
             _runningMaxInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-IntervalMin";
-            desc = "Interval Min of samples for " + info.Description;
+            desc = "Interval Min " + info.ValueName + " for " + info.Description;
             _currentMinInfo = new MetricsInfoImpl(name, desc);
 
             name = info.Name + "-IntervalMax";
-            desc = "Interval Max of samples for " + info.Description;
+            desc = "Interval Max " + info.ValueName + " for " + info.Description;
             _currentMaxInfo = new MetricsInfoImpl(name, desc);
         }
 
