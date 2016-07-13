@@ -1,15 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 using Org.Apache.REEF.Common.metrics.Api;
 using Org.Apache.REEF.Common.metrics.MutableMetricsLib.NamedParameters;
 using Org.Apache.REEF.Tang.Annotations;
 
 namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
 {
+    /// <summary>
+    /// A mutable metric with stats. Useful for throughput and latency measurements.
+    /// </summary>
     public class MutableStat : MutableMetric
     {
         private readonly IMetricsInfo _numSamplesInfo;
@@ -28,6 +42,12 @@ namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
         private readonly bool _showExtendedStats;
         private readonly object _lock = new object();
 
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        /// <param name="info">Meta-data of the metric.</param>
+        /// <param name="extended">If false, outputs only current mean, otherwise outputs 
+        /// everything(mean, variance, min, max overall and of current interval.</param>
         [Inject]
         public MutableStat(IStatsInfo info, [Parameter(typeof(ExtendedStatsParameter))] bool extended) : base(info)
         {
@@ -70,6 +90,11 @@ namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
             _currentMaxInfo = new MetricsInfoImpl(name, desc);
         }
 
+        /// <summary>
+        /// Adds a value to the stat. All the stats (mean, variance etc.) 
+        /// are updated.
+        /// </summary>
+        /// <param name="value">Value of the metric.</param>
         public void Add(double value)
         {
             lock (_lock)
@@ -80,6 +105,12 @@ namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
             }
         }
 
+        /// <summary>
+        /// Gets the snapshot of the metric. Adds different stats (mean, variance, min, max) 
+        /// as separate gauge metrics.
+        /// </summary>
+        /// <param name="recordBuilder">The metrics record builder.</param>
+        /// <param name="all">If true, record even unchanged metrics.</param>
         public override void TakeSnapshot(IMetricsRecordBuilder recordBuilder, bool all)
         {
             lock (_lock)

@@ -134,10 +134,9 @@ under the License.
     <Compile Include="metrics\Api\MetricsException.cs" />
     <Compile Include="metrics\Api\MetricsTag.cs" />
     <Compile Include="metrics\Api\MetricType.cs" />
+    <Compile Include="metrics\MutableMetricsLib\IStatsInfo.cs" />
     <Compile Include="metrics\MutableMetricsLib\MetricsInfoImpl.cs" />
     <Compile Include="metrics\MutableMetricsLib\MetricsRegistry.cs" />
-    <Compile Include="metrics\MutableMetricsLib\MutableGaugeDouble.cs" />
-    <Compile Include="metrics\MutableMetricsLib\MutableGaugeFloat.cs" />
     <Compile Include="metrics\MutableMetricsLib\MutableGaugeLong.cs" />
     <Compile Include="metrics\MutableMetricsLib\MutableGaugeInt.cs" />
     <Compile Include="metrics\MutableMetricsLib\MutableGauge.cs" />
@@ -146,11 +145,14 @@ under the License.
     <Compile Include="metrics\MutableMetricsLib\MutableCounter.cs" />
     <Compile Include="metrics\MutableMetricsLib\MutableMetric.cs" />
     <Compile Include="metrics\Api\TypeConverterPrecisionParameter.cs" />
+    <Compile Include="metrics\MutableMetricsLib\MutableRate.cs" />
     <Compile Include="metrics\MutableMetricsLib\MutableStat.cs" />
     <Compile Include="metrics\MutableMetricsLib\NamedParameters\ExtendedStatsParameter.cs" />
     <Compile Include="metrics\MutableMetricsLib\NamedParameters\MetricsInfoParameters.cs" />
     <Compile Include="metrics\MutableMetricsLib\NamedParameters\MetricsInitValueParameters.cs" />
+    <Compile Include="metrics\MutableMetricsLib\NamedParameters\StatValueNameParameter.cs" />
     <Compile Include="metrics\MutableMetricsLib\StatsHelperClass.cs" />
+    <Compile Include="metrics\MutableMetricsLib\StatsInfoImpl.cs" />
     <Compile Include="Poison\PoisonedEventHandler.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Protobuf\ReefProtocol\ClientRuntime.pb.cs">
