@@ -110,7 +110,7 @@ namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
             {
                 double oldMean = _mean;
                 _mean += (value - _mean) / _numSamples;
-                _unNormalizedVariance = (value - oldMean) * (value - _mean);
+                _unNormalizedVariance += (value - oldMean) * (value - _mean);
             }
             return this;
         }

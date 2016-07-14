@@ -45,6 +45,7 @@ under the License.
   <ItemGroup>
     <Compile Include="metrics\TestDefaultTypeConverter.cs" />
     <Compile Include="metrics\TestMetricsTag.cs" />
+    <Compile Include="metrics\TestMutableMetrics.cs" />
     <Compile Include="TestHttpSerialization.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

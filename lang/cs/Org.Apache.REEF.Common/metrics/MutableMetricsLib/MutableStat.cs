@@ -118,7 +118,7 @@ namespace Org.Apache.REEF.Common.metrics.MutableMetricsLib
                 var lastStat = Changed ? _intervalStat : _prevStat;
                 if (all || Changed)
                 {
-                    recordBuilder.AddCounter(_numSamplesInfo, lastStat.NumSamples)
+                    recordBuilder.AddCounter(_numSamplesInfo, _runningStat.NumSamples)
                         .AddGauge(_currentMeanInfo, lastStat.Mean);
 
                     if (_showExtendedStats)

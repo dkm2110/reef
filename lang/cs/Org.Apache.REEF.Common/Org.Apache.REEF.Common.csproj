@@ -134,6 +134,8 @@ under the License.
     <Compile Include="metrics\Api\MetricsException.cs" />
     <Compile Include="metrics\Api\MetricsTag.cs" />
     <Compile Include="metrics\Api\MetricType.cs" />
+    <Compile Include="metrics\MutableMetricsLib\ConfigurationModules\StatsInfoConfiguration.cs" />
+    <Compile Include="metrics\MutableMetricsLib\ConfigurationModules\MetricsInfoConfiguration.cs" />
     <Compile Include="metrics\MutableMetricsLib\IStatsInfo.cs" />
     <Compile Include="metrics\MutableMetricsLib\MetricsInfoImpl.cs" />
     <Compile Include="metrics\MutableMetricsLib\MetricsRegistry.cs" />
